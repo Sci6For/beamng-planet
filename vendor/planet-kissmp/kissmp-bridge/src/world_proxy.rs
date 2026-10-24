@@ -142,15 +142,26 @@ pub async fn start(
  let mut send=connection.open_uni().await?;write_json(&mut send,&WorldRequest::Open{host_secret,client_fingerprint:client,game_fingerprint:game_hash,catalogue_hash:cat},65536).await?;
   let(mut game,address)=listener.accept().await?;if !address.ip().is_loopback(){bail!("Earth proxy loopback")};
 let outgoing=async {loop{let r=requests.recv().await.ok_or_else(||anyhow::anyhow!("proxy closed"))?;write_json(&mut send,&r,65536).await?;}#[allow(unreachable_code)]Ok::<(),anyhow::Error>(())};
- let(mut input,mut output)=game.split();let pp=p.clone();let cc=connection.clone();let incoming=async move{
+ let(mut input,output)=game.split();let output=Mutex::new(output);let incoming_output=&output;let pp=p.clone();let cc=connection.clone();let incoming=async move{
  let mut notified=std::collections::HashSet::new();let mut resources=cc.accept_uni().await?;let mut store=artifact_store::ArtifactStore::new(Path::new(&cfg.profile_root),m_room(&cc,&cfg)?)?;loop{
  let wire:WireEnvelope=read_json(&mut resources,ENVELOPE_MAX).await?;let e=&wire.envelope;
  let expected=tokio::time::timeout(std::time::Duration::from_secs(5),async {loop{if let Some(b)=pp.binding.lock().await.clone(){break b};tokio::time::sleep(std::time::Duration::from_millis(5)).await}}).await?;
  let _=expected;if e.resources.len()>MAX_RESOURCES{bail!("resource count")};
  for r in &e.resources {validate_manifest(r)?;let flag=resources.read_u8().await?;if flag==0{if !store.has(r)?{bail!("missing deduplicated artifact")};continue};if flag!=1{bail!("resource flag")};store.stage(r)?;let mut offset=0;let mut b=vec![0;CHUNK];while offset<r.byte_length.0{let n=std::cmp::min(CHUNK as u64,r.byte_length.0-offset) as usize;resources.read_exact(&mut b[..n]).await?;store.accept_chunk(&r.sha256,offset,&b[..n])?;offset+=n as u64;}store.publish(&r.sha256)?;}
- let payload=store.ready(e)?;pp.publish_verified(&wire,&payload,&mut output,&mut notified).await?;
+ let payload=store.ready(e)?;pp.publish_verified(&wire,&payload,&mut *incoming_output.lock().await,&mut notified).await?;
  }#[allow(unreachable_code)]Ok::<(),anyhow::Error>(())};
- let game_requests=async {loop{let payload:Value=read_json(&mut input,65536).await?;validate_earth(&payload)?;tx.try_send(WorldRequest::Earth{payload}).map_err(|_|anyhow::anyhow!("Earth queue overflow"))?;}#[allow(unreachable_code)]Ok::<(),anyhow::Error>(())};
+ let game_requests=async {loop{
+ let payload:Value=read_json(&mut input,65536).await?;
+ // The ordinary Earth client also sends local settings and UI requests (cache
+ // cap immediately after hello, and periodic place lookups). These must never
+ // reach the host backend or tear down an otherwise valid world connection.
+ // Reply only with a fixed, bounded kind/code; never echo the request's data.
+ if let Some(kind @ ("cache"|"where"|"geocode"|"route"|"map_tiles"|"place_previews"|"random_place"|"open_page"))=payload["type"].as_str(){
+  write_json(&mut *output.lock().await,&json!({"type":"request_error","requestType":kind,"errorCode":"lanRequestUnavailable"}),1024).await?;
+  continue;
+ }
+ validate_earth(&payload)?;tx.try_send(WorldRequest::Earth{payload}).map_err(|_|anyhow::anyhow!("Earth queue overflow"))?;
+ }#[allow(unreachable_code)]Ok::<(),anyhow::Error>(())};
  tokio::select!{r=outgoing=>r,r=incoming=>r,r=game_requests=>r,reason=connection.closed()=>Err(reason.into())}
  }.await;
         if let Err(e) = result {

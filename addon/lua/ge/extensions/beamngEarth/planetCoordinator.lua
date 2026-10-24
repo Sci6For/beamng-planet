@@ -110,6 +110,14 @@ function M.new(engine,earth,leases,clock)
     if not a or value.phase=='error' or value.phase=='ready' then return end
     local helper=engine.helperStatus and engine.helperStatus()
     if helper and helper.state=='error' then fail(a,helper.errorCode);return end
+    if a.lan then
+      local lan=helper and helper.lan
+      if lan and lan.operationId==a.lan.operationId and lan.generation==a.lan.generation and lan.state=='error' then
+        fail(a,lan.errorCode or 'sessionRejected');return
+      end
+      local barrier=engine.lanBarrier and engine.lanBarrier(a.spec.id,copy(a.lan))
+      if barrier and barrier.errorCode then fail(a,barrier.errorCode);return end
+    end
     local s=earth.getLaunchStatus(a.spec.id)
     if s and s.id==a.spec.id then
       -- Core commit serial is monotonic across sessions. Never reaccept an old
@@ -149,7 +157,10 @@ function M.new(engine,earth,leases,clock)
             value.localReady=true;value.lanReady=resumed==true
             if barrier and barrier.errorCode then fail(a,barrier.errorCode);return end
           end
-          if not resumed then value.phase='settling'
+          if not resumed then
+            value.phase='network'
+            a.networkWaitStarted=a.networkWaitStarted or clock()
+            if clock()-a.networkWaitStarted>=120 then fail(a,'readyTimeout');return end
           elseif a.started and a.coverAck and s.serverSession~=nil and s.anchorId~=nil and serial~=nil then
             if leases.active(a.spec.id) then
               value.covered=false;exitTag(a);engine.input(a.spec.id,false);a.input=false

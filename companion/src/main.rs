@@ -44,6 +44,9 @@ fn main() {
             .map_err(|_| ErrorCode::InvalidConfig)? {
             return Ok(());
         }
+        if !beamng_earth_companion::startup_network::ensure(&config) {
+            return Ok(());
+        }
         let game = GameSession::launch(&command, &config.game_root).map_err(|e| e.code())?;
         beamng_earth_companion::runtime::run(config, game).map_err(|e| e.code())
     })();

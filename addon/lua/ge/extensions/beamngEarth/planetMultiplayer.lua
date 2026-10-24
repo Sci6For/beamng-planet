@@ -270,5 +270,8 @@ function M.onVehicleDestroyed(localId)
  local v=s.vehicles[s.spawnRequested];if v and v.localId==localId then instance.sendCommand({type='Remove',vehicle_id=v.vehicle_id,vehicle_epoch=v.vehicle_epoch});s.spawnRequested=nil;s.vehicleSerial=(s.vehicleSerial or 0)+1 end
 end
 M.onUpdate=M.update
+-- This owner is created in the menu, before stock level startup unloads auto
+-- extensions. Keep its transaction and transport callbacks until explicit leave.
+M.onExtensionLoaded=function() setExtensionUnloadMode(M,'manual') end
 M.onExtensionUnloaded=function() instance.leaveSession() end
 return M

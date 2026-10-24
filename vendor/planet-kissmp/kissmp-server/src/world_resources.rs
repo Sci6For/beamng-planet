@@ -38,15 +38,17 @@ pub fn validate_earth(v:&serde_json::Value)->Result<()>{
  let o=v.as_object().ok_or_else(||anyhow::anyhow!("Earth request object"))?;
  let kind=o.get("type").and_then(|x|x.as_str()).unwrap_or("");
  let keys:&[&str]=match kind {
- "hello"=>&["type","protocol","format","sessions","slotSession","slotsHeld"],
+ "hello"=>&["type","protocol","format","modVersion","sessions","slotSession","slotsHeld"],
  "prepare_anchor"=>&["type","requestId","lat","lon","cx","cy"],
  "prepare_terrain"|"commit_terrain"=>&["type","requestId","anchorId","cx","cy"],
  "commit_anchor"=>&["type","anchorId"],
- "pose"=>&["type","anchorId","x","y","z","vx","vy","vz","lat","lon","cam","follow","held","sessions","slotsGone","view"],
+ "pose"=>&["type","anchorId","x","y","z","vx","vy","vz","lat","lon","speed","cam","follow","held","sessions","slotsGone","view"],
  "roads_reset"=>&["type"],_=>bail!("Earth request kind refused")};
  if o.keys().any(|k|!keys.contains(&k.as_str()))||serde_json::to_vec(v)?.len()>64*1024 {bail!("Earth request schema")}
  fn check(v:&serde_json::Value,depth:usize)->bool {if depth>8{return false}match v{serde_json::Value::Array(a)=>a.len()<=512&&a.iter().all(|x|check(x,depth+1)),serde_json::Value::Object(o)=>o.len()<=16&&o.values().all(|x|check(x,depth+1)),serde_json::Value::String(s)=>s.len()<=128&&!s.contains(['\\','/'])&&!s.contains(".."),serde_json::Value::Number(n)=>n.as_f64().map_or(false,|x|x.is_finite()&&x.abs()<1e12),_=>true}}
- if !check(v,0){bail!("Earth field bound")};
+ // The closed schema bounds the root object (a full pose has 17 permitted
+ // fields). Keep the existing smaller object/depth bounds for nested values.
+ if !o.values().all(|value|check(value,1)){bail!("Earth field bound")};
  if kind=="prepare_anchor" {let la=o.get("lat").and_then(|x|x.as_f64()).ok_or_else(||anyhow::anyhow!("latitude"))?;let lo=o.get("lon").and_then(|x|x.as_f64()).ok_or_else(||anyhow::anyhow!("longitude"))?;if la.abs()>90.||lo.abs()>180.{bail!("WGS84")}}
  Ok(())
 }

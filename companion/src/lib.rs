@@ -19,3 +19,4 @@ mod tests;
 pub mod lan_protocol;
 pub mod lan_lifecycle;
 #[cfg(windows)] pub mod lan_runtime;
+#[cfg(windows)] pub mod startup_network;
