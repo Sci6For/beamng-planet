@@ -384,6 +384,10 @@ pub enum Control {
         name: String,
         setup: serde_json::Value,
     },
+    HostState {
+        ready: bool,
+        location: Option<[f64; 3]>,
+    },
     Descriptor {
         canonical_json: String,
     },
@@ -454,6 +458,11 @@ pub fn validate_control(bytes: &[u8]) -> Result<Control, ProtocolError> {
         validate_peer(ALPN, *version)?
     }
     match &control {
+        Control::HostState { ready, location } => {
+            if (*ready && location.is_none()) || location.as_ref().map_or(false, |p| !valid_wgs84(p)) {
+                return Err("invalid_host_state");
+            }
+        }
         Control::Descriptor { canonical_json } => {
             parse_canonical_descriptor(canonical_json.as_bytes())?;
         }

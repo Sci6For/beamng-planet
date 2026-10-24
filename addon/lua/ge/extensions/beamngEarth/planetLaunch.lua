@@ -3,6 +3,18 @@ local M = {}
 
 local function finite(n) return type(n) == 'number' and n == n and math.abs(n) < math.huge end
 local function text(s, limit) return type(s) == 'string' and #s > 0 and #s <= limit end
+-- Match the host's Windows-safe path components without restricting UTF-8 or
+-- punctuation that is valid in a saved .pc filename. These values stay data.
+function M.safePathComponent(s)
+  if not text(s,255) or s=='.' or s=='..' or s:find('[%. ]$') or s:find('[/\\:*?"<>|%z\1-\31\127]') or s:find('\194[\128-\159]') then return false end
+  local base=s:match('^[^.]*'):upper()
+  return base~='CON' and base~='PRN' and base~='AUX' and base~='NUL' and not base:match('^COM[1-9]$') and not base:match('^LPT[1-9]$')
+end
+function M.validConfigPath(path)
+  if not text(path,512) then return false end
+  local model,filename=path:match('^vehicles/([^/]+)/([^/]+)$')
+  return model~=nil and M.safePathComponent(model) and M.safePathComponent(filename) and filename:sub(-3)=='.pc'
+end
 local function fields(t, allowed)
   if type(t) ~= 'table' or getmetatable(t) ~= nil then return false end
   for k in pairs(t) do if not allowed[k] then return false end end
@@ -51,9 +63,12 @@ local function valid(spec)
   local v = spec.vehicle
   if not fields(v, {model=true,config=true,paints=true}) or not text(v.model, 128)
       or not v.model:match('^[%w_-]+$') or not text(v.config, 512) then return false end
-  -- Installed mods use decimal config names (for example Serenity's 4.0ex).
-  -- Keep these as data while rejecting path traversal and executable strings.
-  if v.config:find('..',1,true) or (not v.config:match('^[%w_%.%- ]+$') and not v.config:match('^vehicles/[%w_-]+/[%w_%.%- ]+%.pc$')) then return false end
+  local configPath=v.config
+  if not configPath:find('/',1,true) then
+    if configPath=='.' or configPath=='..' then return false end
+    configPath='vehicles/'..v.model..'/'..configPath..(configPath:sub(-3)=='.pc' and '' or '.pc')
+  end
+  if not M.validConfigPath(configPath) then return false end
   if not paintsValid(v.paints) then return false end
   local s = spec.setup
   if not fields(s, {trafficMode=true,timeOfDay=true,date=true,timePlay=true}) then return false end

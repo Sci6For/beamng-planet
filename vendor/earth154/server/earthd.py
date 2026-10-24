@@ -2585,7 +2585,7 @@ class Connection:
         self.lan_current = None
         self.lan_owned_anchors = set()
         self.lan_enabled = False
-        self.lan_queue = asyncio.Queue(maxsize=32)
+        self.lan_queue = self.new_lan_queue()
         self.lan_sender = None
         self.lan_queue_bytes = 0
         self.reader, self.writer = reader, writer
@@ -2804,6 +2804,13 @@ class Connection:
             raise RuntimeError("activate a LAN world before binding a physics frame")
         self.physics_frame = frame if isinstance(frame, PhysicsFrame) else PhysicsFrame(**frame)
 
+    @staticmethod
+    def new_lan_queue():
+        # _regroup retires an entire old tile set synchronously. A 32-item cap
+        # closes healthy LAN sessions before the sender can run even once.
+        # send() instead bounds retained bytes, including per-item overhead.
+        return asyncio.Queue()
+
     async def lan_send_loop(self):
         from worldresources import MAX_ENVELOPE
         try:
@@ -2828,14 +2835,19 @@ class Connection:
         if not self.writer.is_closing():
             if self.lan_enabled:
                 if self.lan_sender is None: self.lan_sender=asyncio.create_task(self.lan_send_loop())
-                n=len(protocol.encode(msg))
-                if n>4*1024*1024 or self.lan_queue_bytes+n>8*1024*1024:
+                wire_size=len(protocol.encode(msg))
+                n=wire_size+512  # account for the queue item and small Python containers
+                if wire_size>4*1024*1024 or self.lan_queue_bytes+n>8*1024*1024:
+                    log.error('LAN outbox budget exceeded: kind=%s queued=%d bytes=%d incoming=%d',
+                              msg.get('type'),self.lan_queue.qsize(),self.lan_queue_bytes,n)
                     self.writer.close(); return
                 binding=_lan_request_binding.get() or (self.physics_frame,self.lan_operation)
                 anchor=self.s.anchors.get(msg.get('anchorId'))
                 if anchor is not None and getattr(anchor,'lan_operation',None) is not None:
                     binding=(anchor.physics_frame,anchor.lan_operation)
-                if binding[0] is None: self.writer.close(); return
+                if binding[0] is None:
+                    log.error('LAN output has no frame binding: kind=%s',msg.get('type'))
+                    self.writer.close(); return
                 try:
                     self.lan_queue.put_nowait((msg,n,*binding)); self.lan_queue_bytes+=n
                 except asyncio.QueueFull: self.writer.close()

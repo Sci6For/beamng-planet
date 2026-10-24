@@ -20,8 +20,8 @@
         <label class="join-code">Код подключения <textarea v-bng-text-input :value="JSON.stringify(session.ticket)" readonly rows="2" spellcheck="false" @focus="$event.target.select()" /></label>
         <BngButton accent="secondary" @click="copyCode">Копировать код подключения</BngButton>
       </template>
-      <p v-if="session.mode==='join' && connected">Место и условия поездки задаёт ведущий. Выберите свой автомобиль.</p>
-      <p v-if="session.phase==='error'">Проверьте соединение локальной сети и разрешения сетевого доступа на обоих компьютерах.</p>
+      <p v-if="session.mode==='join' && connected && session.hostReady && session.phase!=='error'">Вы выбираете место появления и автомобиль. Мир и условия поездки общие с ведущим.</p>
+      <p v-if="session.phase==='error' && !session.errorCode">Проверьте соединение локальной сети и разрешения сетевого доступа на обоих компьютерах.</p>
       <BngButton v-if="connected && session.phase==='error'" accent="secondary" :disabled="busy" @click="retry">Повторить</BngButton>
       <BngButton v-if="connected" accent="secondary" :disabled="busy" @click="leave">Покинуть сессию</BngButton>
     </div>

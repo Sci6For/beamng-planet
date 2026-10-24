@@ -82,19 +82,36 @@ impl WorldAuthority {
 if let Control::DescriptorAgreement{world_digest}=&message.command{let d=self.descriptor().await.ok_or_else(||anyhow::anyhow!("descriptor absent"))?;if canonical_digest(&d).map_err(anyhow::Error::msg)?!=*world_digest{bail!("descriptor mismatch")};let p=self.peers.read().await.get(&client).cloned().ok_or_else(||anyhow::anyhow!("peer"))?;*p.agreed.lock().await=true;return Ok(())}
  let hook=self.hook.read().unwrap().clone();if let Some(hook)=hook{hook(client,message,self.clone()).await}else{bail!("frame coordinator required")}}
  async fn peer(self:Arc<Self>,client:Id,connection:quinn::Connection)->Result<()>{let mut requests=tokio::time::timeout(std::time::Duration::from_secs(120),connection.accept_uni()).await??;
- let open:WorldRequest=read_json(&mut requests,65536).await?;let host=match open{WorldRequest::Open{host_secret,client_fingerprint,game_fingerprint,catalogue_hash}=>{if catalogue_hash!=*self.server.catalogue_digest.read().unwrap(){bail!("vehicleModsMismatch")};if client_fingerprint!=self.client_fingerprint||game_fingerprint!=self.game_fingerprint{bail!("fingerprint mismatch")};host_secret==Some(self.host_secret)},_=>bail!("world stream handshake")};if host{let mut h=self.host.lock().await;if h.is_some(){bail!("host already bound")};*h=Some(client)}
+ let open:WorldRequest=read_json(&mut requests,65536).await?;
+ let (host,client_catalogue)=match open{WorldRequest::Open{host_secret,client_fingerprint,game_fingerprint,catalogue_hash}=>{if client_fingerprint!=self.client_fingerprint||game_fingerprint!=self.game_fingerprint{bail!("fingerprint mismatch")};(host_secret==Some(self.host_secret),catalogue_hash)},_=>bail!("world stream handshake")};
+ let mut resources=connection.open_uni().await?;
+ let expected=self.server.catalogue_digest.read().unwrap().clone();
+ tokio::time::timeout(std::time::Duration::from_secs(600),async {
+  use crate::planet_session::catalogue;
+  let manifest=if client_catalogue!=expected {let (_,m)=catalogue::snapshot(Path::new(&self.cfg.game_root),Path::new(&self.cfg.profile_root))?;if m.catalogue_hash!=expected{bail!("vehicle sync host changed; restart room")};Some(m)}else{None};
+  write_json(&mut resources,&catalogue::sync::Offer{catalogue_hash:expected.clone(),manifest:manifest.clone()},ENVELOPE_MAX).await?;
+  if let Some(m)=manifest {let request:WorldRequest=read_json(&mut requests,ENVELOPE_MAX).await?;let missing=match request{WorldRequest::CatalogueFetch{missing}=>missing,_=>bail!("vehicle sync request")};catalogue::sync::send_files(&mut resources,Path::new(&self.cfg.profile_root),&m,&missing).await?;}
+  match read_json::<WorldRequest>(&mut requests,65536).await?{WorldRequest::CatalogueReady{catalogue_hash} if catalogue_hash==expected=>{},_=>bail!("vehicle sync agreement hashMismatch")};Ok::<(),anyhow::Error>(())
+ }).await??;
+ if host{let mut h=self.host.lock().await;if h.is_some(){bail!("host already bound")};*h=Some(client);drop(h);self.server.bind_host(client).await?;}
  let mut tcp=TcpStream::connect(&self.cfg.backend_address).await?;write_json(&mut tcp,&json!({"type":"lan_reserve","roomId":self.server.ticket.room_id}),65536).await?;let (mut read,write)=tcp.into_split();let interest=Arc::new(Interest{write:Mutex::new(write),frame:Mutex::new(None),agreed:Mutex::new(false),alias:Mutex::new(None)});self.peers.write().await.insert(client,interest.clone());
  if let Some(d)=self.descriptor().await{self.server.emit_control(client,Control::Descriptor{canonical_json:String::from_utf8(canonical_descriptor(&d).map_err(anyhow::Error::msg)?)?}).await?;}
- let mut resources=connection.open_uni().await?;let profile=PathBuf::from(&self.cfg.profile_root);let c=connection.clone();let failure_world=self.clone();let alias_interest=interest.clone();let reader=tokio::spawn(async move{let mut sent=std::collections::HashSet::new();loop{let mut v:Value=read_json(&mut read,ENVELOPE_MAX).await?;if v["type"]!="lan_envelope"{continue};let mut e:BackendEnvelope=serde_json::from_value(json!({"operation":v["operation"].take(),"frame_id":v["frameId"].take(),"envelope":v["envelope"].take(),"files":v["files"].take()}))?;if e.envelope.payload["type"]=="anchor_error" && e.envelope.payload["error"].as_str().map_or(false,|s|s=="ValueError: terrain relief exceeds shared frame quantum; prepare a new frame") {
+ let profile=PathBuf::from(&self.cfg.profile_root);let c=connection.clone();let failure_world=self.clone();let alias_interest=interest.clone();let mut reader=tokio::spawn(async move{let mut sent=std::collections::HashSet::new();loop{let mut v:Value=read_json(&mut read,ENVELOPE_MAX).await?;if v["type"]!="lan_envelope"{continue};let mut e:BackendEnvelope=serde_json::from_value(json!({"operation":v["operation"].take(),"frame_id":v["frameId"].take(),"envelope":v["envelope"].take(),"files":v["files"].take()}))?;if e.envelope.payload["type"]=="anchor_error" && e.envelope.payload["error"].as_str().map_or(false,|s|s=="ValueError: terrain relief exceeds shared frame quantum; prepare a new frame") {
  let binding=alias_interest.frame.lock().await.clone().ok_or_else(||anyhow::anyhow!("failed frame binding"))?;
  let hook=failure_world.failure_hook.read().unwrap().clone();if let Some(hook)=hook{hook(client,e.operation,(binding.1.height_quantum*2.).min(1.),failure_world.clone()).await?;continue}
  }
  if e.envelope.payload["type"]=="anchor_ready" {if let Some(alias)=alias_interest.alias.lock().await.take(){e.envelope.payload["requestId"]=alias;}}if let Err(e)=send_envelope(&mut resources,&e,&mut sent,&profile).await{c.close(1u32.into(),b"resourceRejected");return Err(e)}}#[allow(unreachable_code)]Ok::<(),anyhow::Error>(())});
- let result:Result<()>=async{loop{let request:WorldRequest=read_json(&mut requests,65536).await?;match request{
+ let requests_loop=async{loop{let request:WorldRequest=read_json(&mut requests,65536).await?;match request{
  WorldRequest::Earth{payload}=>{validate_earth(&payload)?;if payload["type"]=="hello"{continue};if payload["type"]=="prepare_anchor"&&interest.frame.lock().await.is_none(){*interest.alias.lock().await=Some(payload["requestId"].clone());let centre=[payload["lat"].as_f64().unwrap_or(0.),payload["lon"].as_f64().unwrap_or(0.),0.];if self.descriptor().await.is_none(){bail!("host must negotiate world before level launch")};
  tokio::time::timeout(std::time::Duration::from_secs(20),async{loop{if *interest.agreed.lock().await{break};tokio::time::sleep(std::time::Duration::from_millis(10)).await}}).await?;self.subscribe(client,centre).await?;self.send_earth(client,json!({"type":"hello","protocol":4,"format":4})).await?;
  }else{self.send_earth(client,payload).await?;}},
- WorldRequest::Ready{operation,room,world_epoch,frame_id,frame_epoch}=>{if room!=self.server.ticket.room_id||world_epoch!=Epoch(1){bail!("ready world")};let binding=interest.frame.lock().await.clone().ok_or_else(||anyhow::anyhow!("ready binding"))?;if binding.0!=operation||binding.1.frame_id!=frame_id||binding.1.frame_epoch!=frame_epoch{bail!("ready frame")};let hook=self.resource_hook.read().unwrap().clone();if let Some(hook)=hook{hook(client,operation,binding.1,self.clone()).await?;}},_=>bail!("duplicate world handshake")}}}.await;
+ WorldRequest::Ready{operation,room,world_epoch,frame_id,frame_epoch}=>{if room!=self.server.ticket.room_id||world_epoch!=Epoch(1){bail!("ready world")};let binding=interest.frame.lock().await.clone().ok_or_else(||anyhow::anyhow!("ready binding"))?;if binding.0!=operation||binding.1.frame_id!=frame_id||binding.1.frame_epoch!=frame_epoch{bail!("ready frame")};let hook=self.resource_hook.read().unwrap().clone();if let Some(hook)=hook{hook(client,operation,binding.1,self.clone()).await?;}},_=>bail!("duplicate world handshake")}}};
+ // Either side ending terminates this peer. Previously an EOF from the backend
+ // only finished the detached reader; the request loop waited forever.
+ let result:Result<()>=tokio::select!{
+  r=requests_loop=>r,
+  r=&mut reader=>match r{Ok(r)=>r,Err(e)=>Err(e.into())},
+ };
  reader.abort();self.release(client).await;result
  }
 }
@@ -109,3 +126,5 @@ pub fn validate_host_world(location:&[f64;3],name:&str,setup:&Value)->Result<()>
  if o.get("date").and_then(Value::as_i64).map_or(true,|n|n.abs()>8640000000000){bail!("host shared date")}
  if !["disabled","fast","normal","slow","realtime"].contains(&o.get("timePlay").and_then(Value::as_str).unwrap_or("")){bail!("host must resolve shared timePlay")};Ok(())
 }
+
+

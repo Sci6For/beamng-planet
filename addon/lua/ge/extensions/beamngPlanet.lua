@@ -69,6 +69,7 @@ local function validSelection(v,s)
 end
 local function available(v)
   if type(v)~='table' or type(v.model)~='string' or type(v.config)~='string' then return false end
+  local mp=ext('beamngEarth_planetMultiplayer');if mp and mp.isVehicleAllowed and not mp.isVehicleAllowed(v.model,v.config) then return false end
   local source=core_vehicles and core_vehicles.getModel(v.model)
   -- Do not use the configurator's silent fallback to another config.
   return source and source.configs and source.configs[v.config]~=nil and true or false
@@ -111,38 +112,42 @@ function M.getSessionState()
       if phases[s.phase] then sessionState.phase=s.phase end
       sessionState.peerStatus=type(s.peerStatus)=='string' and s.peerStatus:sub(1,128) or nil
       sessionState.errorCode=s.errorCode
+      sessionState.hostReady=s.hostReady==true and type(s.hostLocation)=='table' and point(s.hostLocation.lat,s.hostLocation.lon)
+      sessionState.hostLocation=sessionState.hostReady and copy(s.hostLocation) or nil
+      sessionState.modSync=copy(s.modSync)
       -- Destination comes only through the descriptor-validating local adapter.
       local d=s.destination
       if not sessionState.destinationAccepted and type(d)=='table' and point(d.lat,d.lon) and type(d.name)=='string' and #d.name<=512 and validSelection({model='validation',config='validation'},d.setup or {}) then
-        selectedPoint={lat=d.lat,lon=d.lon,name=d.name};setup=copy(d.setup or {});sessionState.destinationAccepted=true
+        if sessionState.mode~='join' then selectedPoint={lat=d.lat,lon=d.lon,name=d.name} end
+        setup=copy(d.setup or {});sessionState.destinationAccepted=true
       end
     end
     local lease=ext('beamngEarthAutostart')
     local helper=lease and lease.getPlanetHelperStatus and lease.getPlanetHelperStatus()
     local lan=helper and helper.lan
     if lan and lan.operationId==sessionIntent.operationId and lan.generation==sessionIntent.generation then
-      if lan.state=='error' then sessionState.phase='error';sessionState.errorCode=lan.errorCode end
+      if lan.state=='error' then sessionState.phase='error';if sessionState.errorCode~='vehicleSyncRestartRequired' then sessionState.errorCode=lan.errorCode end end
       if sessionState.mode=='host' and lan.ticket and endpoint(lan.ticket.endpoint,false) and hex(lan.ticket.roomId,32) and hex(lan.ticket.certificateSha256,64) and hex(lan.ticket.joinSecret,32) then sessionState.ticket=copy(lan.ticket) end
     end
   end
   return copy(sessionState)
 end
 local function retireSession()
-  local old=sessionIntent;local mode=sessionState.mode
+  local old=sessionIntent;local mode=sessionState.mode;local restoreError
   sessionIntent=nil;sessionState={mode='solo',phase='off'} -- invalidate before callbacks
   if old then
-    local a=adapter();if a and a.leaveSession then a.leaveSession(old.operationId,old.generation) end
+    local a=adapter();if a and a.leaveSession then local r=a.leaveSession(old.operationId,old.generation);if r and not r.ok then restoreError=r.errorCode end end
     local lease=ext('beamngEarthAutostart')
     if lease and lease.setPlanetLanIntent then old.state='leave';lease.setPlanetLanIntent(mode,old,chooser);lease.setPlanetLanIntent('solo',nil,chooser) end
   end
-  return old~=nil
+  return old~=nil,restoreError
 end
 function M.leaveSession()
   if not ownsMap() or not chooser then return result(false,'chooserClosed') end
-  retireSession()
+  local _,restoreError=retireSession()
   local launch=coordinator and coordinator.status()
   if launch and (launch.covered or launch.phase=='ready') then coordinator.cancel() end
-  return result(true)
+  return result(not restoreError,restoreError)
 end
 function M.setSessionMode(mode)
   if not active() then return result(false,'chooserClosed') end
@@ -187,7 +192,12 @@ end
 
 function M.selectPoint(lat,lon,name)
   if not active() then return result(false,'chooserClosed') end
-  if sessionIntent then return result(false,'sessionDestinationLocked') end
+  if sessionIntent then
+    local s=M.getSessionState()
+    if s.phase=='error' or s.errorCode then return result(false,s.errorCode or 'sessionRejected') end
+    if s.mode~='join' then return result(false,'sessionDestinationLocked') end
+    if not s.hostReady or not s.destinationAccepted then return result(false,'hostNotReady') end
+  end
   if not point(lat,lon) or (name~=nil and (type(name)~='string' or #name>512)) then return result(false,'invalidPoint') end
   selectedPoint={lat=lat,lon=lon,name=name or ''};return result(true)
 end
@@ -207,6 +217,11 @@ function M.getSetupOptions()
 end
 function M.getLaunchSelection()
   if not active() then return result(false,'chooserClosed') end
+  if sessionIntent then
+    local s=M.getSessionState()
+    if s.phase=='error' or s.errorCode then return result(false,s.errorCode or 'sessionRejected') end
+    if s.mode=='join' and (not s.hostReady or not s.destinationAccepted) then return result(false,'hostNotReady') end
+  end
   if not selectedPoint then return result(false,'pointRequired') end
   if not vehicle then return result(false,'vehicleRequired') end
   if not available(vehicle) then return result(false,'vehicleUnavailable') end
@@ -392,7 +407,8 @@ local function makeCoordinator()
     -- Normal stock vehicle-spawn table; no customLoadingFunction delaying the
     -- Earth onClientStartMission hook, and no configurator fallback/default.
     local v=snapshot.vehicle
-    local options={config=v.config,paint=v.paints and v.paints[1],paint2=v.paints and v.paints[2],paint3=v.paints and v.paints[3]}
+    local a=adapter();local config=sessionIntent and a and a.resolveVehicleConfig and a.resolveVehicleConfig(v.model,v.config) or v.config
+    local options={config=config,paint=v.paints and v.paints[1],paint2=v.paints and v.paints[2],paint3=v.paints and v.paints[3]}
     return freeroam_freeroam.startFreeroamByName('beamng_earth',nil,nil,{v.model,options})
   end
   engine.helperStatus=function()

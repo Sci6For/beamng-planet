@@ -96,7 +96,7 @@
   "patches": [
     {
       "path": "patches/core.patch",
-      "sha256": "0aee53c50ee9f0fc0583b83a8e9cf99d666441dc66eaace93a15f452d71207b5"
+      "sha256": "ed83b98ab7259f45962fe8443b402b3b4f8c7d517dfdf3e43b6197a5a3bd2e56"
     },
     {
       "path": "patches/roads.patch",
@@ -153,6 +153,7 @@
     "lua/ge/extensions/beamngEarth/planetCoordinator.lua": "addon/lua/ge/extensions/beamngEarth/planetCoordinator.lua",
     "lua/ge/extensions/beamngEarth/planetFrames.lua": "addon/lua/ge/extensions/beamngEarth/planetFrames.lua",
     "lua/ge/extensions/beamngEarth/planetMultiplayer.lua": "addon/lua/ge/extensions/beamngEarth/planetMultiplayer.lua",
+    "lua/ge/extensions/beamngEarth/planetVehicleSync.lua": "addon/lua/ge/extensions/beamngEarth/planetVehicleSync.lua",
     "lua/ge/extensions/beamngEarth/planetNetCodec.lua": "addon/lua/ge/extensions/beamngEarth/planetNetCodec.lua",
     "lua/ge/extensions/beamngEarth/navigationAudio.lua": "addon/lua/ge/extensions/beamngEarth/navigationAudio.lua",
     "lua/ge/extensions/beamngEarth/trafficBoundary.lua": "addon/lua/ge/extensions/beamngEarth/trafficBoundary.lua",

@@ -10,6 +10,8 @@ use std::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[path = "planet_catalogue.rs"]
 pub mod catalogue;
+#[path = "host_presence.rs"]
+pub mod host_presence;
 
 #[derive(Default)]
 pub struct BoundedQueue {
@@ -71,6 +73,7 @@ pub struct ManagedServer {
     pub ticket: ConnectionTicket,
     pub session: Arc<tokio::sync::Mutex<PlanetSession>>,
     pub catalogue_digest: std::sync::RwLock<String>,
+    host_presence: tokio::sync::Mutex<host_presence::HostPresence>,
     peers: Arc<tokio::sync::Mutex<BTreeMap<Id, Arc<PeerOutput>>>>,
     latest: Arc<tokio::sync::Mutex<BTreeMap<Id, Vec<u8>>>>,
     snapshot_gate: tokio::sync::Mutex<()>,
@@ -135,7 +138,28 @@ impl ManagedServer {
         *self.events.lock().unwrap() = Some(sink);
         Ok(())
     }
+    pub async fn bind_host(&self, client: Id) -> Result<()> {
+        self.host_presence.lock().await.bind(client);
+        Ok(())
+    }
+    async fn broadcast_host_state(&self, state: Control) {
+        let clients: Vec<_> = self.peers.lock().await.keys().copied().collect();
+        for id in clients {
+            // A guest disconnecting must never abort the host's frame transition.
+            let _ = self.emit_control_raw(id, state.clone()).await;
+        }
+    }
     pub async fn emit_control(&self, client: Id, command: Control) -> Result<()> {
+        let mut presence = self.host_presence.lock().await;
+        self.emit_control_raw(client, command.clone()).await?;
+        if presence.observe(client, &command) {
+            self.broadcast_host_state(presence.snapshot()).await;
+        } else if presence.is_bound() && matches!(command, Control::Descriptor { .. }) {
+            self.emit_control_raw(client, presence.snapshot()).await?;
+        }
+        Ok(())
+    }
+    async fn emit_control_raw(&self, client: Id, command: Control) -> Result<()> {
         let session = self.session.lock().await;
         let room = session.room;
         let world_epoch = session.world_epoch;
@@ -209,6 +233,7 @@ impl ManagedServer {
             endpoint,
             ticket,
             catalogue_digest: std::sync::RwLock::new(String::new()),
+            host_presence: tokio::sync::Mutex::new(host_presence::HostPresence::default()),
             session: Arc::new(tokio::sync::Mutex::new(session)),
             peers: Arc::new(tokio::sync::Mutex::new(BTreeMap::new())),
             latest: Arc::new(tokio::sync::Mutex::new(BTreeMap::new())),
@@ -317,6 +342,11 @@ impl ManagedServer {
                         | Control::Leave {}
                 ) {
                     self.session.lock().await.accept_control_identity(id, &m)?;
+                    if let Control::Interest { centre_wgs84, .. } = &m.command {
+                        // Retain the latest host centre for late joiners. Do not
+                        // flood a guest still loading with four UI updates/sec.
+                        self.host_presence.lock().await.interest(id, *centre_wgs84);
+                    }
                     self.event(TransportEvent::Control {
                         client: id,
                         message: m,
@@ -351,6 +381,12 @@ impl ManagedServer {
         writer.abort();
         datagrams.abort();
         self.peers.lock().await.remove(&id);
+        {
+            let mut presence = self.host_presence.lock().await;
+            if presence.depart(id) {
+                self.broadcast_host_state(presence.snapshot()).await;
+            }
+        }
         let publication = self.snapshot_gate.lock().await;
         self.latest.lock().await.remove(&id);
         let removed = {

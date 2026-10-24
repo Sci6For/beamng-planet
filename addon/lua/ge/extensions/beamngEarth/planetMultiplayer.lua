@@ -29,7 +29,7 @@ function M.new(adapter)
  end
  function self.getSessionStatus(op,generation)
   if not s or op~=s.operationId or generation~=s.generation then return {operationId=op,generation=generation,phase='off'} end
-  return {operationId=op,generation=generation,phase=s.phase,peerStatus=s.peerStatus,errorCode=s.errorCode,destination=copy(s.destination)}
+  return {operationId=op,generation=generation,phase=s.phase,peerStatus=s.peerStatus,errorCode=s.errorCode,destination=copy(s.destination),hostReady=s.hostReady==true,hostLocation=copy(s.hostLocation),modSync=copy(s.modSync)}
  end
  function self.getLaunchBarrier(launch,op,generation)
   local r={launchId=launch,operationId=op,generation=generation,resumed=false}
@@ -55,6 +55,12 @@ function M.new(adapter)
   if c.type=='Descriptor' then
    if not adapter.descriptor then return false end;local d,digest=adapter.descriptor(c.canonical_json,s.intent);if not d then fail('descriptorMismatch');return false end
    s.destination=copy(d.environment and d.environment.destination);s.phase='lobby';send({type='DescriptorAgreement',world_digest=digest});return true
+  elseif c.type=='HostState' then
+   local p=c.location
+   if type(c.ready)~='boolean' then return false end
+   if c.ready and (type(p)~='table' or type(p[1])~='number' or type(p[2])~='number' or p[1]~=p[1] or p[2]~=p[2] or math.abs(p[1])>90 or math.abs(p[2])>180) then return false end
+   -- Host readiness opens only the chooser; local commit/resume remains fenced.
+   s.hostReady=c.ready;s.hostLocation=c.ready and {lat=p[1],lon=p[2]} or nil;return true
   elseif c.type=='PrepareFrame' then
    if not id(c.operation) or not frames.validate(c.frame) or (s.frame and codec.compare(c.frame.frame_epoch,s.frame.frame_epoch)<=0) then return false end
    local t=frames.prepare(c);if not t then return false end
@@ -111,7 +117,7 @@ function M.new(adapter)
  end
  function self.leaveSession(op,generation)
   if not s or (op and(op~=s.operationId or generation~=s.generation)) then return {ok=false,errorCode='staleSession'} end
-  send({type='Leave'});hold(false);local old=s;s=nil;adapter.resetPredictors();if adapter.clear then adapter.clear(old) end;adapter.disconnect();return {ok=true}
+  send({type='Leave'});hold(false);local old=s;s=nil;adapter.resetPredictors();local clean=not adapter.clear or adapter.clear(old)~=false;adapter.disconnect();return {ok=clean,errorCode=not clean and 'vehicleSyncRestartRequired' or nil}
  end
  self.leave=self.leaveSession
  function self.isManaged() return s~=nil end
@@ -124,6 +130,7 @@ local held=nil
 local function core() return ext('beamngEarth_core') end
 local function network() return ext('kissmp_network') end
 local adapter={}
+local instance
 function adapter.send(m) local n=network();return n and n.planetSendControl(m) end
 function adapter.publish(v) local n=network();return n and n.planetPublishState(v) end
 function adapter.hold(on,reason,generation)
@@ -170,6 +177,7 @@ end
 function adapter.spawn(v,owned) if owned then local car=getPlayerVehicle(0);if car then v.localId=car:getID();car:queueLuaCommand("extensions.load('kissmp_planet')") end end end
 function adapter.vehicleAvailable(v)
  if type(v.model)~='string' or type(v.config)~='string' or not core_vehicles or not core_vehicles.getModel then return false end
+ if not M.isVehicleAllowed(v.model,v.config) then return false end
  local config=v.config:gsub('^/','');local model,key=config:match('^vehicles/([^/]+)/([^/]+)%.pc$')
  if model then if model~=v.model then return false end else key=config:gsub('%.pc$','') end
  local data=core_vehicles.getModel(v.model)
@@ -179,7 +187,10 @@ function adapter.remove(v)
  local obj=remoteObjects[v.vehicle_id];remoteObjects[v.vehicle_id]=nil;if obj and getObjectByID(obj:getID())==obj then obj:delete() end
 end
 function adapter.reset(v) local obj=remoteObjects[v.vehicle_id];if obj then obj:reset() end end
-function adapter.clear() for id,obj in pairs(remoteObjects) do if getObjectByID(obj:getID())==obj then obj:delete() end end;remoteObjects={} end
+function adapter.clear(s)
+ for id,obj in pairs(remoteObjects) do if getObjectByID(obj:getID())==obj then obj:delete() end end;remoteObjects={}
+ return not s.vehicleSync or s.vehicleSync.restore()
+end
 function adapter.remote(v,pose,state)
  local c=core();local owner=getPlayerVehicle(0);if not owner or not c then return end
  local p=owner:getPosition();local d=math.sqrt((pose.position[1]-p.x)^2+(pose.position[2]-p.y)^2+(pose.position[3]-p.z)^2)
@@ -188,7 +199,7 @@ function adapter.remote(v,pose,state)
  if not allowed then if obj and obj:getActive() then obj:setActive(0) end;return end
  if not obj then
   if not adapter.vehicleAvailable(v) or not core_vehicles.spawnNewVehicle then return false,'vehicleUnavailable' end
-  obj=core_vehicles.spawnNewVehicle(v.model,{config=v.config,autoEnterVehicle=false,pos=vec3(unpack(pose.position)),rot=quat(unpack(pose.orientation))})
+  obj=core_vehicles.spawnNewVehicle(v.model,{config=M.resolveVehicleConfig(v.model,v.config),autoEnterVehicle=false,pos=vec3(unpack(pose.position)),rot=quat(unpack(pose.orientation))})
   if not obj then return false,'vehicleUnavailable' end;obj:setActive(0);remoteObjects[v.vehicle_id]=obj
   obj:queueLuaCommand("extensions.load('kissmp_vehicle');extensions.load('kissmp_transforms');extensions.load('kissmp_input');extensions.load('kissmp_gearbox');extensions.hook('onKissMPVehLoaded');extensions.hook('kissUpdateOwnership',false)")
  end
@@ -210,8 +221,7 @@ function adapter.tick(dt,s,self)
  conversionGrace=math.max(0,conversionGrace-1)
  local v=getPlayerVehicle(0);if not v then return end
  if not s.spawnRequested then
-  local model=v:getJBeamFilename();local config=v.partConfig
-  if type(config)=='string' then config=config:gsub('^/','') end
+  local model=v:getJBeamFilename();local config=M.canonicalVehicleConfig(model,v.partConfig)
   if not adapter.vehicleAvailable({model=model,config=config}) then self.failSession('vehicleUnavailable');return end
   if type(config)=='string' and model and hashStringSHA256 then
    s.spawnRequested=hashStringSHA256(s.owner..s.operationId..'vehicle'..tostring(s.vehicleSerial or 0)):sub(1,32):lower()
@@ -236,8 +246,52 @@ function adapter.tick(dt,s,self)
  end
 end
 
-local instance=M.new(adapter)
+instance=M.new(adapter)
+function M.resolveVehicleConfig(model,config)
+ local s=instance.raw();return s and s.vehicleSync and s.vehicleSync.resolve(model,config) or config
+end
+function M.isVehicleAllowed(model,config)
+ local s=instance.raw();return not s or not s.vehicleSync or s.vehicleSync.allowed(model,config)
+end
+function M.canonicalVehicleConfig(model,config)
+ local s=instance.raw();if s and s.vehicleSync then return s.vehicleSync.canonical(model,config) end
+ return type(config)=='string' and config:gsub('^/','') or config
+end
+local function pollVehicleSync(s,base)
+ if s.mode~='join' or not jsonReadFile or (s.syncPollAt and s.clock<s.syncPollAt) then return end
+ s.syncPollAt=s.clock+.5
+ local plan=jsonReadFile(base..'vehicle-sync.json')
+ if type(plan)~='table' or plan.operationId~=s.operationId or plan.generation~=s.generation then return end
+ local states={downloading=true,mountRequired=true,ready=true}
+ if not states[plan.state] then return end
+ s.modSync={state=plan.state,bytesDone=tonumber(plan.bytesDone),bytesTotal=tonumber(plan.bytesTotal)}
+ if plan.state~='mountRequired' or s.syncApplied==plan.catalogueHash or s.syncFailed then return end
+ local ok=false
+ local inWorld=scenetree and (scenetree.MissionGroup or scenetree.MissionCleanup)
+ if not plan.restartRequired and not inWorld and not s.launch and not s.destination and not s.resumed and jsonWriteFile then
+  local function refresh()
+   -- Stock modmanager sends file notifications after mount/unmount, then the
+   -- vehicle catalogue drops its caches. Include old and new files on restore.
+   local files=s.syncFiles or {};local seen={};for _,v in ipairs(files) do seen[v.filename]=true end
+   for _,path in ipairs(plan.configFiles or {}) do local file='/'..path;if not seen[file] then files[#files+1]={filename=file,type='modified'};seen[file]=true end end
+   if FS and FS.findFiles then for _,path in ipairs(FS:findFiles('/vehicles/','*',-1,true,false) or {}) do if not seen[path] then files[#files+1]={filename=path,type='modified'};seen[path]=true end end end
+   s.syncFiles=files
+   if _G.onFileChanged and #files>0 then _G.onFileChanged(files) end
+   if core_vehicles and core_vehicles.clearCache then core_vehicles.clearCache() end
+  end
+  s.vehicleSync=s.vehicleSync or require('beamngEarth/planetVehicleSync').new(FS,refresh)
+  ok=s.vehicleSync.apply(plan)
+ end
+ local receipt={operationId=s.operationId,generation=s.generation,catalogueHash=plan.catalogueHash,ok=ok,errorCode=not ok and 'vehicleSyncRestartRequired' or nil}
+ local written,result=false,nil
+ if jsonWriteFile then written,result=pcall(jsonWriteFile,base..'vehicle-sync-applied.json',receipt,false,nil,true) end
+ if not written or result~=true then ok=false;if s.vehicleSync then s.vehicleSync.restore() end end
+ if ok then s.syncApplied=plan.catalogueHash else s.syncFailed=true;instance.failSession('vehicleSyncRestartRequired') end
+end
 function adapter.poll(s)
+ local base='settings/beamngEarthAutostart/lan/'..s.operationId..'-'..s.generation..'/'
+ pollVehicleSync(s,base)
+ if s.syncFailed then return end
  local lease=ext('beamngEarthAutostart');local status=lease and lease.getPlanetHelperStatus and lease.getPlanetHelperStatus();local lan=status and status.lan
  if lan and lan.operationId==s.operationId and lan.generation==s.generation and lan.state=='error' then
   if s.errorCode~=lan.errorCode then instance.failSession(lan.errorCode or 'sessionRejected') end;return
@@ -245,7 +299,7 @@ function adapter.poll(s)
  if network() and s.connected then return end
  if s.phase=='error' then return end
  if not lan or lan.operationId~=s.operationId or lan.generation~=s.generation or (lan.state~='lobby' and lan.state~='preparing' and lan.state~='active') then return end
- local path='settings/beamngEarthAutostart/lan/'..s.operationId..'-'..s.generation..'/launch.json';local cfg=jsonReadFile and jsonReadFile(path)
+ local cfg=jsonReadFile and jsonReadFile(base..'launch.json')
  if not cfg or not cfg.intent or cfg.intent.operationId~=s.operationId or cfg.intent.generation~=s.generation or cfg.bridgeAddress~='127.0.0.1:7894' or cfg.earthProxyAddress~='127.0.0.1:47615' or not id(cfg.capability) then return end
  if extensions and extensions.load then extensions.load('kissmp_network');extensions.load('kissmp_transform') end
  local n=network();if not n then return end

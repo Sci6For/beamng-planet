@@ -337,9 +337,9 @@
 +    or {required=4,ready=0,errors={},settled=false}
 +  local support = false
 +  local veh = getPlayerVehicle(0)
-+  local expected = spec.vehicle
++  local expected = spec.vehicle;local mp=extensions and extensions.beamngEarth_planetMultiplayer;local config=mp and mp.resolveVehicleConfig and mp.resolveVehicleConfig(expected.model,expected.config) or expected.config
 +  local matches = veh and veh.getJBeamFilename and veh:getJBeamFilename() == expected.model
-+    and (veh.partConfig == expected.config or veh.partConfig == 'vehicles/'..expected.model..'/'..expected.config..'.pc')
++    and (veh.partConfig == config or veh.partConfig == config:gsub('^/','') or (config == expected.config and veh.partConfig == 'vehicles/'..expected.model..'/'..expected.config..'.pc'))
 +  if g.placed and (not veh or veh:getID()~=g.vehicleId) then g.pauseError='vehicleChanged' end
 +  local materials = matches and veh.isRenderMaterialsReady and veh:isRenderMaterialsReady() == true
 +  -- The anchor is a height proof at the centre, not a promise of flat terrain.

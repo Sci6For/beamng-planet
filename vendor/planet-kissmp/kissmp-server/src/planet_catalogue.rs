@@ -1,6 +1,8 @@
 use super::*;
 use std::convert::TryInto;
 use std::io::{Read, Seek, SeekFrom};
+#[path = "vehicle_sync.rs"]
+pub mod sync;
 /// Read stock ZIP central directories without extracting or trusting executable paths.
 /// ZIP64 directory offsets are required by the measured >4 GiB common stock archive.
 pub fn stock_catalogue(game_root: &Path) -> Result<(BTreeSet<String>, String)> {
@@ -24,6 +26,9 @@ pub fn stock_catalogue(game_root: &Path) -> Result<(BTreeSet<String>, String)> {
 }
 
 fn archive_entries(path: &Path) -> Result<std::collections::BTreeMap<String, (u32, u32)>> {
+    archive_entries_with_ui(path,false)
+}
+fn archive_entries_with_ui(path: &Path, include_ui:bool) -> Result<std::collections::BTreeMap<String, (u32, u32)>> {
         let mut entries = std::collections::BTreeMap::new();
         let mut file = std::fs::File::open(path)?;
         let length = file.metadata()?.len();
@@ -88,8 +93,11 @@ fn archive_entries(path: &Path) -> Result<std::collections::BTreeMap<String, (u3
             file.read_exact(&mut name)?;
             let name = String::from_utf8(name)?;
             file.seek(SeekFrom::Current((get16(30) as i64) + (get16(32) as i64)))?;
+            if !sync::safe_path(name.strip_suffix('/').unwrap_or(&name)) {
+                bail!("unsafe archive entry path")
+            }
             let vehicle = name.starts_with("vehicles/");
-            let dependency = ["lua/", "art/", "sound/"].iter().any(|prefix| name.starts_with(prefix));
+            let dependency = ["lua/", "art/", "sound/"].iter().any(|prefix| name.starts_with(prefix)) || (include_ui && name.starts_with("ui/"));
             if !vehicle && !dependency && !name.ends_with(".pc") {
                 continue;
             }
@@ -113,11 +121,16 @@ fn archive_entries(path: &Path) -> Result<std::collections::BTreeMap<String, (u3
 }
 
 /// Match the current profile's enabled vehicle resources. The catalogue stays a
-/// strict room contract: identical installed mods/configs on both machines, no
-/// downloading or fallback to a different car. Whole mod bytes cover JBeam,
+/// strict room contract: identical active session mods/configs on both machines.
+/// Whole mod bytes cover JBeam,
 /// materials and scripts as well as the selectable .pc files.
 pub fn installed_catalogue(game_root: &Path, profile_root: &Path) -> Result<(BTreeSet<String>, String)> {
+    let (members, snapshot) = snapshot(game_root, profile_root)?;
+    Ok((members, snapshot.catalogue_hash))
+}
+pub fn snapshot(game_root: &Path, profile_root: &Path) -> Result<(BTreeSet<String>, sync::Manifest)> {
     let (mut members, stock_digest) = stock_catalogue(game_root)?;
+    let mut resources = Vec::new();
     let mods = profile_root.join("mods");
     let mut disabled = BTreeSet::new();
     let database = mods.join("db.json");
@@ -143,8 +156,12 @@ pub fn installed_catalogue(game_root: &Path, profile_root: &Path) -> Result<(BTr
             if disabled.contains(&relative.to_lowercase()) { continue; }
             let entries=archive_entries(&path)?;
             if entries.is_empty() { continue; }
+            if entries.values().any(|(_,size)|*size as u64>sync::MAX_FILE)
+                || entries.values().map(|(_,size)|*size as u64).sum::<u64>()>sync::MAX_CACHE/2 { bail!("expanded vehicle mod bound"); }
             add_configs(&mut members,entries.keys().map(String::as_str))?;
-            fingerprints.insert(relative,crate::world_authority::hash_file(&path)?);
+            let hash=crate::world_authority::hash_file(&path)?;
+            resources.push(sync::FileSpec{path:relative.clone(),sha256:hash.clone(),byte_length:std::fs::metadata(&path)?.len()});
+            fingerprints.insert(relative,hash);
         }
         let unpacked=mods.join("unpacked");
         if unpacked.is_dir() {
@@ -155,7 +172,9 @@ pub fn installed_catalogue(game_root: &Path, profile_root: &Path) -> Result<(BTr
                 for file in files(&path)? {
                     let name=relative(&path,&file)?;
                     if name.starts_with("vehicles/") && name.ends_with(".pc") { add_configs(&mut members,[name.as_str()])?; }
-                    manifest.insert(name,crate::world_authority::hash_file(&file)?);
+                    let hash=crate::world_authority::hash_file(&file)?;
+                    resources.push(sync::FileSpec{path:relative(profile_root,&file)?,sha256:hash.clone(),byte_length:std::fs::metadata(&file)?.len()});
+                    manifest.insert(name,hash);
                 }
                 fingerprints.insert(relative(profile_root,&path)?,descriptor_bytes_digest(&serde_json::to_vec(&manifest)?));
             }
@@ -168,14 +187,23 @@ pub fn installed_catalogue(game_root: &Path, profile_root: &Path) -> Result<(BTr
         for path in files(&saved)? {
             let name=relative(profile_root,&path)?;
             if !name.ends_with(".pc") { continue; }
-            add_configs(&mut members,[name.as_str()])?;
-            manifest.insert(name,crate::world_authority::hash_file(&path)?);
+            // BeamNG intentionally gives a player's saved configuration priority
+            // over a packaged configuration with the same name. Its bytes remain
+            // in the contract and the receiver supplies an explicit override path.
+            let mut saved_member=BTreeSet::new();
+            add_configs(&mut saved_member,[name.as_str()])?;
+            members.extend(saved_member);
+            let hash=crate::world_authority::hash_file(&path)?;
+            resources.push(sync::FileSpec{path:name.clone(),sha256:hash.clone(),byte_length:std::fs::metadata(&path)?.len()});
+            manifest.insert(name,hash);
         }
         if !manifest.is_empty() { fingerprints.insert("vehicles".to_string(),descriptor_bytes_digest(&serde_json::to_vec(&manifest)?)); }
     }
-    if fingerprints.is_empty() { return Ok((members,stock_digest)); }
-    let digest=descriptor_bytes_digest(&serde_json::to_vec(&(stock_digest,fingerprints))?);
-    Ok((members,digest))
+    let digest=if fingerprints.is_empty(){stock_digest.clone()}else{descriptor_bytes_digest(&serde_json::to_vec(&(stock_digest.clone(),fingerprints))?)};
+    resources.sort_by(|a,b|a.path.cmp(&b.path));
+    let snapshot=sync::Manifest{catalogue_hash:digest,stock_hash:stock_digest,files:resources};
+    snapshot.validate()?;
+    Ok((members,snapshot))
 }
 fn add_configs<'a>(members:&mut BTreeSet<String>, names:impl IntoIterator<Item=&'a str>)->Result<()> {
     for name in names {

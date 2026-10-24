@@ -11,6 +11,8 @@ pub const ENVELOPE_MAX: usize = 4 * 1024 * 1024;
 #[serde(tag="kind", deny_unknown_fields)]
 pub enum WorldRequest {
  Open { host_secret: Option<Id>, client_fingerprint:String, game_fingerprint:String, catalogue_hash:String },
+ CatalogueFetch { missing:Vec<String> },
+ CatalogueReady { catalogue_hash:String },
  Earth { payload:serde_json::Value },
  Ready { operation:Id, room:Id, world_epoch:Epoch, frame_id:Id, frame_epoch:Epoch },
 }

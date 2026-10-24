@@ -137,13 +137,17 @@ pub async fn start(
     let p = proxy.clone();
     tokio::spawn(async move {
         let result:Result<()>=async{
- let (client,game_hash)=fingerprints(Path::new(&cfg.profile_root),Path::new(&cfg.game_root))?;let(_,cat)=catalogue::installed_catalogue(Path::new(&cfg.game_root),Path::new(&cfg.profile_root))?;*p.fingerprints.lock().await=Some((client.clone(),game_hash.clone(),cat.clone()));
+ let (client,game_hash)=fingerprints(Path::new(&cfg.profile_root),Path::new(&cfg.game_root))?;let(_,local_catalogue)=catalogue::snapshot(Path::new(&cfg.game_root),Path::new(&cfg.profile_root))?;let cat=local_catalogue.catalogue_hash.clone();
  let host_secret=if cfg.mode=="host"{let path=Path::new(&cfg.status_path).with_file_name("host-world.json");let value:Value=serde_json::from_slice(&std::fs::read(path)?)?;Some(serde_json::from_value(value["hostSecret"].clone())?)}else{None};
- let mut send=connection.open_uni().await?;write_json(&mut send,&WorldRequest::Open{host_secret,client_fingerprint:client,game_fingerprint:game_hash,catalogue_hash:cat},65536).await?;
+ let mut send=connection.open_uni().await?;write_json(&mut send,&WorldRequest::Open{host_secret,client_fingerprint:client.clone(),game_fingerprint:game_hash.clone(),catalogue_hash:cat},65536).await?;
+ let mut resources=connection.accept_uni().await?;
+ let cat=tokio::select!{r=tokio::time::timeout(std::time::Duration::from_secs(600),catalogue::sync::receive(&cfg,&mut resources,&mut send,&local_catalogue))=>r??,reason=connection.closed()=>return Err(reason.into())};
+ *p.fingerprints.lock().await=Some((client,game_hash,cat.clone()));
+ write_json(&mut send,&WorldRequest::CatalogueReady{catalogue_hash:cat},65536).await?;
   let(mut game,address)=listener.accept().await?;if !address.ip().is_loopback(){bail!("Earth proxy loopback")};
 let outgoing=async {loop{let r=requests.recv().await.ok_or_else(||anyhow::anyhow!("proxy closed"))?;write_json(&mut send,&r,65536).await?;}#[allow(unreachable_code)]Ok::<(),anyhow::Error>(())};
  let(mut input,output)=game.split();let output=Mutex::new(output);let incoming_output=&output;let pp=p.clone();let cc=connection.clone();let incoming=async move{
- let mut notified=std::collections::HashSet::new();let mut resources=cc.accept_uni().await?;let mut store=artifact_store::ArtifactStore::new(Path::new(&cfg.profile_root),m_room(&cc,&cfg)?)?;loop{
+ let mut notified=std::collections::HashSet::new();let mut store=artifact_store::ArtifactStore::new(Path::new(&cfg.profile_root),m_room(&cc,&cfg)?)?;loop{
  let wire:WireEnvelope=read_json(&mut resources,ENVELOPE_MAX).await?;let e=&wire.envelope;
  let expected=tokio::time::timeout(std::time::Duration::from_secs(5),async {loop{if let Some(b)=pp.binding.lock().await.clone(){break b};tokio::time::sleep(std::time::Duration::from_millis(5)).await}}).await?;
  let _=expected;if e.resources.len()>MAX_RESOURCES{bail!("resource count")};
@@ -183,3 +187,5 @@ fn m_room(_connection: &quinn::Connection, cfg: &Launch) -> Result<Id> {
         Ok(serde_json::from_value(v["ticket"]["roomId"].clone())?)
     }
 }
+
+
