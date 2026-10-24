@@ -2821,6 +2821,10 @@ class Connection:
             self.writer.close()
 
     def send(self, msg):
+        # An asynchronous upstream version lookup can finish after LAN binding.
+        # It is local UI information, never part of the verified world stream.
+        if self.lan_enabled and msg.get('type') == 'update':
+            return
         if not self.writer.is_closing():
             if self.lan_enabled:
                 if self.lan_sender is None: self.lan_sender=asyncio.create_task(self.lan_send_loop())

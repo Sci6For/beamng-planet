@@ -49,6 +49,10 @@ def newer(latest, current):
 
 def check(current, net=None):
     """The update GitHub has for version current, or None. Blocking (a worker thread)."""
+    # Planet has its own verified release updater; an upstream installer would
+    # replace the integrated client/server with an incompatible standalone app.
+    if re.fullmatch(r'v?\d+\.\d+\.\d+-planet\d+', str(current or '')):
+        return None
     if not current:
         return None
     net = net if net is not None else netfetch.default_fetcher()

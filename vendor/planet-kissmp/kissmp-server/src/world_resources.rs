@@ -74,7 +74,7 @@ pub async fn send_envelope(w:&mut quinn::SendStream,e:&BackendEnvelope,sent:&mut
 pub fn id_hex(id:Id)->String{id.0.iter().map(|b|format!("{:02x}",b)).collect()}
 
 pub const JSON_ARTIFACT_MAX:u64=8*1024*1024;
-pub const EARTH_KINDS:&[&str]=&["hello","status","anchor_ready","terrain_ready","anchor_error","terrain_error","roads_tile","roads_drop","veg_tile","veg_drop","bldfar_tile","bldfar_drop","far_tile","far_remove","far_swap","far_done","far_retex","block_base","sea","ground_ahead","credits","weather","gravity","cache","route_result","where_result","geocode_result","map_tiles_ready","place_previews_ready","random_place_result"];
+pub const EARTH_KINDS:&[&str]=&["hello","status","anchor_ready","terrain_ready","anchor_error","terrain_error","roads_tile","roads_drop","veg_tile","veg_drop","bldfar_tile","bldfar_drop","far_tile","far_remove","far_swap","far_done","far_retex","block_base","sea","ground_ahead","navgraph","credits","weather","gravity","cache","route_result","where_result","geocode_result","map_tiles_ready","place_previews_ready","random_place_result"];
 pub fn validate_data_string(s:&str,paths:&std::collections::HashSet<String>)->Result<()>{
  let low=s.to_ascii_lowercase();
  if s.contains("../")||s.contains("..\\")||s.contains('\\')||s.as_bytes().get(1)==Some(&b':')||[".lua",".js",".cs",".exe",".dll",".py",".bat",".cmd"].iter().any(|x|low.ends_with(x)){bail!("unsafe data reference")}

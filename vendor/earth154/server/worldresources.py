@@ -10,7 +10,7 @@ MAX_ARTIFACT = 128 * 1024 * 1024
 MAX_ENVELOPE = 4 * 1024 * 1024
 MAX_RESOURCES = 512
 ALLOWED = {'.raw', '.ter', '.png', '.dds', '.jpg', '.jpeg', '.json', '.cdae', '.dae'}
-KINDS = set('hello status anchor_ready terrain_ready anchor_error terrain_error roads_tile roads_drop veg_tile veg_drop bldfar_tile bldfar_drop far_tile far_remove far_swap far_done far_retex block_base sea ground_ahead credits weather gravity cache route_result where_result geocode_result map_tiles_ready place_previews_ready random_place_result'.split())
+KINDS = set('hello status anchor_ready terrain_ready anchor_error terrain_error roads_tile roads_drop veg_tile veg_drop bldfar_tile bldfar_drop far_tile far_remove far_swap far_done far_retex block_base sea ground_ahead navgraph credits weather gravity cache route_result where_result geocode_result map_tiles_ready place_previews_ready random_place_result'.split())
 PATH_FIELDS = set('path shape texture heightmap ter layers base prewarm diffuseMap normalMap detailMap colorMap opacityMap'.split())
 
 class ResourceRejected(ValueError): pass
