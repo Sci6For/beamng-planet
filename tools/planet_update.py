@@ -330,6 +330,31 @@ def attempt_update(installation, ownership, state):
         archive.unlink(missing_ok=True)
 
 
+@contextmanager
+def external_process_environment():
+    """Do not make the native helper/game retain this one-file worker's DLLs."""
+    environment = {key: value for key, value in os.environ.items()
+                   if not key.startswith('_PYI_') and key != '_MEIPASS2'}
+    environment['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
+    kernel = None
+    if sys.platform == 'win32':
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.GetDllDirectoryW.argtypes = [ctypes.c_uint, ctypes.c_wchar_p]
+        kernel.GetDllDirectoryW.restype = ctypes.c_uint
+        kernel.SetDllDirectoryW.argtypes = [ctypes.c_wchar_p]
+        kernel.SetDllDirectoryW.restype = ctypes.c_int
+        previous = ctypes.create_unicode_buffer(32768)
+        if kernel.GetDllDirectoryW(len(previous), previous) >= len(previous):
+            raise OSError('DLL directory exceeds Windows path limit')
+        if not kernel.SetDllDirectoryW(None):
+            raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        yield environment
+    finally:
+        if kernel is not None and not kernel.SetDllDirectoryW(previous.value or None):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+
 def handoff(installation, parent_pid, game_argv, profile):
     installation = installer.safe_path(installation)
     profile = installer.safe_path(profile)
@@ -356,8 +381,9 @@ def handoff(installation, parent_pid, game_argv, profile):
             # game_active() before it can replace any managed files.
             try:
                 helper = installer.safe_path(installation / 'beamng-earth-companion.exe')
-                subprocess.Popen([str(helper), '--skip-update', '--', *game_argv], creationflags=NO_WINDOW,
-                                 close_fds=True, shell=False)
+                with external_process_environment() as environment:
+                    subprocess.Popen([str(helper), '--skip-update', '--', *game_argv], creationflags=NO_WINDOW,
+                                     close_fds=True, shell=False, env=environment)
             except OSError as exc:
                 write_status(state, 'launch-failed', exc)
                 return 1
