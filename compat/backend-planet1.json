@@ -1,0 +1,23 @@
+{
+  "backendVersion": "1.5.4-planet1",
+  "sha256": "10e6ff2e5e137e47a2f2b47fedac55bed6560c520d3b8504f154af5e8ff3ebbd",
+  "upstreamVersion": "1.5.4-beta",
+  "upstreamRelease": "https://github.com/TecnaGamer/BeamNG.Earth/releases/tag/v1.5.4-beta",
+  "source": "vendor/earth154",
+  "buildRecord": "artifacts/backend-planet1-final/build.json",
+  "license": "vendor/earth154/LICENSE",
+  "protocol": 4,
+  "contentFormat": 4,
+  "clientBaseVersion": "1.5.3-beta",
+  "regressionTestsPassed": 105,
+  "testSite": {
+    "name": "Baiterek roundabout, Ridder",
+    "lat": 50.335999,
+    "lon": 83.4863
+  },
+  "serverProbe": "artifacts/road-probe/ridder-planet1",
+  "remaining": "Actual game surface intersections and all reported source footprint errors need site-specific visual confirmation. Missing mapped colours remain procedural.",
+  "liveAcceptance": "Steam launch at Baiterek Ridder passed:4/4 cells,stable0.75s,cover=false;game left open;test autostart removed",
+  "terrainMeasurement": "10 collision samples bilinear;8/10 render samples match SWNE within0.061mm;2unidentified hits;reported intrusion not conclusively reproduced",
+  "packageManifestSha256": "adb04d14b3bc3d2992bf9c368b2f9f2e7c84078798b40faaf997a78a843edcdb"
+}

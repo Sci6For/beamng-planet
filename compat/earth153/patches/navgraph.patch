@@ -1,0 +1,114 @@
+--- a/lua/ge/extensions/beamngEarth/navgraph.lua
++++ b/lua/ge/extensions/beamngEarth/navgraph.lua
+@@ -9,6 +9,7 @@
+ -- edge carries its speed limit and lanes; the road rules come from a file of ours (the level's info.json has none);
+ -- a reset by someone else (map.reset() with no graph rebuilds an empty one from our level) is undone next frame.
+ local M = {}
++local trafficBoundary = require('beamngEarth/trafficBoundary')
+ 
+ M.EDGE_M = 60           -- graph nodes this far inside the block's ground box only
+ M.MIN_GAP_S = 1.0
+@@ -68,7 +69,7 @@
+ -- Returns nodes, node count, edge count.
+ function M.toNodes(g, b, edgeM, leftHand)
+   local nodes, nn, ne = {}, 0, 0
+-  local keep = {}
++  local keep, cut = {}, {}
+   for name, n in pairs(g.nodes) do
+     if M.inside(b, n[1], n[2], edgeM) then keep[name] = n end
+   end
+@@ -94,9 +95,20 @@
+         B.links[a] = edge
+         ne = ne + 1
+       end
+-    end
+-  end
+-  return nodes, nn, ne
++    elseif keep[a] and not keep[bb] then
++      cut[a] = true
++    elseif keep[bb] and not keep[a] then
++      cut[bb] = true
++    end
++  end
++  -- Only degree-one nodes created by this clip are false dead ends. Natural
++  -- cul-de-sacs and clipped junctions with another continuation are unchanged.
++  for name in pairs(cut) do
++    local n, count = nodes[name], 0
++    if n then for _ in pairs(n.links) do count = count + 1 end end
++    if count ~= 1 then cut[name] = nil end
++  end
++  return nodes, nn, ne, cut
+ end
+ 
+ function M.onMessage(msg, currentAnchor)
+@@ -136,7 +148,9 @@
+   if not a[8] or not inst.createSignalObject then return end
+   seenHeads[inst.name] = true
+   local h = heads[inst.name]
+-  if h and math.abs(h.x - a[8]) < 0.05 and math.abs(h.y - a[9]) < 0.05 and scenetree.findObjectById(h.id) then return end
++  if h and math.abs(h.x - a[8]) < 0.05 and math.abs(h.y - a[9]) < 0.05
++    and math.abs(h.z - a[10]) < 0.05 and math.abs(h.yaw - (a[11] or 0)) < 0.1
++    and scenetree.findObjectById(h.id) then return end
+   if h then
+     local old = scenetree.findObjectById(h.id)
+     if old then old:delete() end
+@@ -147,7 +161,7 @@
+   m:setFromEuler(vec3(0, 0, -math.rad(a[11] or 0)))     -- as trees.lua turns the static boom (negated: clockwise)
+   m:setPosition(vec3(a[8], a[9], a[10]))
+   o:setTransform(m)
+-  heads[inst.name] = { id = o:getID(), x = a[8], y = a[9] }
++  heads[inst.name] = { id = o:getID(), x = a[8], y = a[9], z = a[10], yaw = a[11] or 0 }
+ end
+ 
+ local function signalData(nodes)
+@@ -212,7 +226,7 @@
+     M.rules = { rightHandDrive = r.rightHandDrive and true or false, turnOnRed = r.turnOnRed and true or false }
+     M.SIGNAL_TYPE = r.redYellow and 'lightsBasicEU' or 'lightsBasic'
+   end
+-  local nodes, nn, ne = M.toNodes(graph, b, M.EDGE_M, M.rules.rightHandDrive)
++  local nodes, nn, ne, cut = M.toNodes(graph, b, M.EDGE_M, M.rules.rightHandDrive)
+   local ts = signalsSystem()
+   -- before the reset: its onNavgraphReloaded would place the old instances on the new graph (research §2.8)
+   if ts then pcall(ts.resetSignals) end
+@@ -247,6 +261,7 @@
+   else
+     persistent = m.nodes
+   end
++  trafficBoundary.bind(m.nodes, cut)
+   if keep then pcall(gps.afterGraph, keep, m.nodes) end    -- before the vehicles' new map
+   be:queueAllObjectLua('mapmgr.requestMap()')
+   pendingSignals = ts and nodes or nil     -- next frame: a second, smaller hitch instead of one big one
+@@ -302,6 +317,7 @@
+   if not (gameplay_traffic and core_multiSpawn and gameplay_walk) and extensions and extensions.load then
+     pcall(extensions.load, unpack(M.EXTENSIONS))
+   end
++  trafficBoundary.refresh()
+   return gameplay_traffic
+ end
+ 
+@@ -335,7 +351,8 @@
+           stillSince[id] = nil
+         end
+         local d = pp and (p - pp):length() or math.huge
+-        if all or not M.inside(b, p.x, p.y, M.GUARD_M) or M.stuck(stillSince[id], now, d) then
++        local atCut = not paused and o.getDirectionVector and trafficBoundary.headingOut(p, o:getDirectionVector())
++        if all or atCut or not M.inside(b, p.x, p.y, M.GUARD_M) or M.stuck(stillSince[id], now, d) then
+           stillSince[id] = nil
+           -- behind the camera: the stock default is 100-500 m in front of it, where the player sees the car
+           -- pop in and its tyres smoke as it lands (the photo comparisons, 2026-10-14)
+@@ -428,6 +445,7 @@
+ 
+ function M.update(aid, b)
+   if not M.enabled or not graph then return end
++  trafficBoundary.refresh()
+   local t0 = os.clock()
+   if applied and t0 - lastGuard >= M.GUARD_S then
+     lastGuard = t0
+@@ -486,6 +504,7 @@
+ end
+ 
+ function M.reset()
++  trafficBoundary.reset()
+   heads = {}            -- (the level took them with it)
+   graph, applied, dirty, lastApply, persistent, ours, foreign = nil, nil, false, -math.huge, nil, false, false
+   started, respawnAll, lastGuard, heldActive = false, false, -math.huge, nil

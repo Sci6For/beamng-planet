@@ -1,0 +1,20 @@
+{
+  "header": {
+    "version": 2
+  },
+  "data": {
+    "perf.enable_view_distance": false,
+    "perf.view_distance": 300,
+    "players.nametags.fade": false,
+    "players.nametags.fade_start_distance": 100,
+    "players.nametags.colorful": true,
+    "players.nametags.use_z": false,
+    "players.show_drivers": true,
+    "players.show_nametags": true,
+    "security.public_mods": false,
+    "security.public_scripting": false,
+    "ui.addr": "",
+    "ui.scale": 1,
+    "ui.window_opacity": 0.8
+  }
+}

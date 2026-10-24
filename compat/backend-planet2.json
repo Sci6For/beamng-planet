@@ -1,0 +1,24 @@
+{
+  "backendVersion": "1.5.4-planet2",
+  "sha256": "1ab9b8e99d08c282f4c7d9d92b37d505421743450946a3e59ea844c6b0f9a8ef",
+  "upstreamVersion": "1.5.4-beta",
+  "source": "vendor/earth154",
+  "buildRecord": "artifacts/backend-planet2-reviewed/build.json",
+  "clientBaseVersion": "1.5.3-beta",
+  "protocol": 4,
+  "contentFormat": 4,
+  "targetedTestsPassed": 275,
+  "packageInstallTestsPassed": 24,
+  "compiledProbe": "artifacts/road-probe/ridder-planet2",
+  "realDataChecks": "artifacts/city-street-objects",
+  "packageManifestSha256": "2745db253e0ec7662d0b0108d241e9f7f9cbb80a08a2be5b4696b8bfb7d6efaa",
+  "installedOwnershipVerified": true,
+  "liveVisualAcceptance": false,
+  "limits": [
+    "Stock European signs and shelters, not custom CIS artwork.",
+    "Intersection-control and speed-sign pole locations remain inferred.",
+    "Exact user-mentioned field not identified; explicit grass/meadow polygons only.",
+    "Mapped leaf type chooses broadleaf/conifer proxies; not exact species.",
+    "No in-game FPS measurement for this build."
+  ]
+}

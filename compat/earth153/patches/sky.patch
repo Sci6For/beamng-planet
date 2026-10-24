@@ -1,0 +1,73 @@
+--- a/lua/ge/extensions/beamngEarth/sky.lua
++++ b/lua/ge/extensions/beamngEarth/sky.lua
+@@ -40,6 +40,25 @@
+ local pending = nil    -- { at, keys }: someone else changed the time; manual after MISSION_SETUP_S
+ local switched = nil   -- the last switch to manual: { at, keys }
+
++-- Planet owns a temporary manual-sky lease, separate from the saved mode.
++-- Keep this one bounded slot across extension reloads; clear by launch identity.
++local planetOverride = rawget(_G, 'beamngPlanetSkyOverride')
++function M.setPlanetOverride(id)
++  if type(id) ~= 'string' or #id == 0 or #id > 128 then return false end
++  pending = nil
++  planetOverride = {id=id, active=false}
++  rawset(_G, 'beamngPlanetSkyOverride', planetOverride)
++  return true
++end
++function M.clearPlanetOverride(id)
++  if not planetOverride or id ~= planetOverride.id then return false end
++  pending = nil
++  planetOverride = nil
++  rawset(_G, 'beamngPlanetSkyOverride', nil)
++  timer = RESYNC_S
++  return true
++end
++
+ -- Day of week, 0 = Sunday (Sakamoto), and the Sunday helpers mirror celestial.lua:261-283 so the
+ -- clock we display agrees with what core_celestial would derive on its own.
+ local function dow(y, m, d)
+@@ -141,6 +160,7 @@
+ end
+
+ function M.sync()
++  if planetOverride then return false end
+   local tod = getTod()
+   if not tod then return false end
+   local lat, lon = tonumber(tod.latitude) or 0, tonumber(tod.longitude) or 0
+@@ -329,7 +349,7 @@
+ -- core_environment's hook (setTimeOfDay passes the whole TimeOfDay table, setState whatever its
+ -- caller gave), fired before the change is applied.
+ function M.onEnvironmentChanged(changes)
+-  if mode ~= 'real' or pending or type(changes) ~= 'table' then return end
++  if planetOverride or mode ~= 'real' or pending or type(changes) ~= 'table' then return end
+   local any = false
+   for k in pairs(TIME_KEYS) do if changes[k] ~= nil then any = true; break end end
+   if not any then return end -- most hooks are weather (ours at 4 Hz): nothing to read
+@@ -362,9 +382,17 @@
+ local function onLevel()
+   clock, graceUntil, bigMapUntil, mission, pending = 0, M.GRACE_S, 0, false, nil
+   inOurLevel = getCurrentLevelIdentifier and getCurrentLevelIdentifier() == M.LEVEL_ID or false
++  if planetOverride then
++    if inOurLevel then planetOverride.active = true
++    else M.clearPlanetOverride(planetOverride.id) end
++  end
+ end
+ M.onClientStartMission = onLevel
+-function M.onClientEndMission() inOurLevel, pending = false, nil end
++function M.onClientEndMission()
++  inOurLevel, pending = false, nil
++  -- A staged next trip may precede the old world's end callback.
++  if planetOverride and planetOverride.active then M.clearPlanetOverride(planetOverride.id) end
++end
+ -- A Lua reload mid-level: settings.lua loads (and applies) before this extension, and no level
+ -- start follows to apply again, so the saved mode is read here.
+ function M.onExtensionLoaded()
+@@ -382,7 +410,7 @@
+   local ok, err = pcall(updateClouds, dtReal)
+   if not ok then log('W', 'beamngEarth', 'clouds: ' .. tostring(err)) end
+   if pending and clock >= pending.at + M.MISSION_SETUP_S then switchToManual() end
+-  if mode ~= 'real' or pending or mission or bigMapBusy() then return end
++  if planetOverride or mode ~= 'real' or pending or mission or bigMapBusy() then return end
+   timer = timer + (dtReal or 0)
+   if timer < RESYNC_S then return end
+   timer = 0

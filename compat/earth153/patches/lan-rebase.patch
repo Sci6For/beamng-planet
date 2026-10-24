@@ -1,0 +1,19 @@
+--- a/lua/ge/extensions/beamngEarth/rebase.lua
++++ b/lua/ge/extensions/beamngEarth/rebase.lua
+@@ -97,6 +97,8 @@
+ -- p_new = R*p + t is applied to veh:getPosition(), which is what spawn.lua:519 feeds in too.
+ -- Returns { [vehId] = { old = {x,y,z}, new = {x,y,z} } } and the player's id.
+ function M.moveVehicles(xf, geodesy)
++  local mp=extensions and extensions.beamngEarth_planetMultiplayer
++  if mp and mp.onFrameConversion then mp.onFrameConversion(true) end
+   local qx, qy, qz, qw = xf:beamngQuat()
+   local player = getPlayerVehicle(0)
+   local playerId = player and player:getID()
+@@ -108,6 +110,7 @@
+     moved[veh:getID()] = { old = { p.x, p.y, p.z }, new = { x, y, z } }
+     M.updateResetState(veh, xf, geodesy, x, y, z)
+   end
++  if mp and mp.onFrameConversion then mp.onFrameConversion(false) end
+   return moved, playerId
+ end
+ 

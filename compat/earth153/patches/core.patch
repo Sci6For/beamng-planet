@@ -1,0 +1,602 @@
+--- a/lua/ge/extensions/beamngEarth/core.lua
++++ b/lua/ge/extensions/beamngEarth/core.lua
+@@ -94,6 +94,13 @@
+   .. 'EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2023 / 2016 & 2017; CC BY-NC-SA 4.0 / CC BY 4.0)'
+ local FULL_ATTRIBUTION = IMAGERY_ATTRIBUTION .. '\n' .. ATTRIBUTION
+ 
++-- Confirmed Planet intent survives resetState and reconnect. No UI pointer writes.
++local planetLaunch = require('beamngEarth/planetLaunch')
++local launch = planetLaunch.new()
++-- Task 2 bounded readiness: per-world observations never survive a reset.
++local planetReadiness = require('beamngEarth/planetReadiness')
++local launchGate, releaseLaunchPause
++local pauseCallOwned = false
+ local st -- all runtime state, see resetState()
+ local rebaseLag = 0 -- frames between a vehicle move request and its visibility (measured, see commitRebase)
+ local roadsSession = nil -- the server session whose road tiles are shown (roads.lua)
+@@ -112,6 +119,9 @@
+ local cacheClears = 0         -- answers to a clear so far (the settings page waits for the next one)
+ 
+ local function resetState()
++  if releaseLaunchPause then releaseLaunchPause() end
++  launchGate = nil
++  planetLaunch.resetWorld(launch)
+   st = {
+     inOurLevel = false,
+     active = false,          -- world logic running (rebase, far field, sky, pose)
+@@ -191,21 +201,39 @@
+ 
+ local teleportTo -- defined with M.teleport (the level start's own teleport is one too)
+ 
+--- the level start's teleport: to the window's lat/lon (the default start until it is changed)
++-- Automatic startup uses only a confirmed snapshot; explicit map teleports stay separate.
+ local function startTeleport()
+-  local lat, lon = ui.getLatLon(DEFAULT_LAT, DEFAULT_LON)
+-  return teleportTo(lat, lon, nil, 'start')
++  if launch.preview then return false end
++  local spec = planetLaunch.current(launch)
++  if spec then
++    if not launch.consumed or not st.sessionId or launch.requestId ~= nil then return false end
++    local status = planetLaunch.status(launch, spec.id)
++    if status.anchorId ~= nil and status.serverSession == st.sessionId then return false end
++    return teleportTo(spec.lat, spec.lon, spec.name, 'start', spec.id)
++  end
++  return false -- direct Earth entry also waits for a confirmed selection
+ end
+ 
+ -- cx, cy: where the anchor's first terrain should be centred in the NEW frame
+ -- ((0,0) for a teleport, snap256(predicted) for a rebase; V1_1_SPEC 3).
+-local function requestAnchor(lat, lon, purpose, cx, cy)
++local function requestAnchor(lat, lon, purpose, cx, cy, launchId)
++  if launch.preview or (purpose == 'teleport' and not launchId and not st.ordinaryWorld and not planetLaunch.ordinaryAllowed(launch)) then return false end
+   if not net.isConnected() then
+     setStatus('Companion server not connected (127.0.0.1:' .. net.PORT .. ')')
+     return false
+   end
+   local id = nextId()
+-  st.pending = { requestId = id, purpose = purpose, lat = lat, lon = lon, sentAt = st.clock }
++  local spec = planetLaunch.current(launch)
++  if purpose == 'resync' and spec and not st.ordinaryWorld then launchId = spec.id end
++  if launchId and not planetLaunch.request(launch, launchId, st.sessionId, id) then return false end
++  if purpose == 'teleport' then
++    -- Explicit ordinary intent gets its own world authorization; it never
++    -- disables session/request fencing or revives a retired deferred commit.
++    st.ordinaryWorld = launchId == nil
++    st.terrainPending, st.rebasing, st.lagProbe = nil, nil, nil
++  end
++  st.pending = { requestId = id, purpose = purpose, lat = lat, lon = lon, sentAt = st.clock,
++    launchId = launchId, serverSession = st.sessionId }
+   net.send({ type = 'prepare_anchor', requestId = id, lat = lat, lon = lon, cx = cx or 0, cy = cy or 0 })
+   return true
+ end
+@@ -350,6 +378,20 @@
+   blurHold.saved = nil
+ end
+ 
++local function recordLaunchImport(msg, ok)
++  local spec = planetLaunch.current(launch)
++  if spec and planetLaunch.accept(launch, spec.id, st.sessionId, msg.requestId) then
++    if ok then
++      planetLaunch.committed(launch, spec.id, st.sessionId, msg.requestId, msg.anchorId)
++      launchGate = planetReadiness.new(spec.id)
++      launchGate.expectedZ = msg.floorZ or msg.groundZ
++      launchGate.tunnel = msg.floorZ ~= nil
++      launchGate.placed, launchGate.frames = false, 0
++      st.placeFrames, st.floorZ, st.floorUntil = nil, nil, nil
++    else planetLaunch.fail(launch, spec.id, 'terrainImportFailed') end
++  end
++end
++
+ local function commitTeleport(msg)
+   local tr, err = anchorTerrain(msg)
+   gov:heavyNow() -- the user asked for a jump: no waiting for a calm frame
+@@ -365,7 +407,7 @@
+   end
+   farfield.switchAnchor(msg.anchorId, false, { cx = tr.cx, cy = tr.cy }, st.sessionId)
+   st.loadingUntil = st.clock + LOADING_AFTER_TELEPORT_S
+-  st.placeFrames = PLACE_DELAY_FRAMES
++  st.placeFrames = PLACE_DELAY_FRAMES -- cleared for Planet by recordLaunchImport
+   st.placeZ = (msg.groundZ or 0) + 1.0
+   -- in a tunnel: set down on the ground over it first (placed in the tube before its road tile came, the car fell
+   -- through the world under the one-sided terrain), moved down onto the floor once that collides (2026-10-17)
+@@ -376,7 +418,7 @@
+   -- so physics never sees that; placePlayer() then sets it down properly.
+   local veh = getPlayerVehicle(0)
+   holdMotionBlur()
+-  if veh then
++  if veh and (st.ordinaryWorld or not planetLaunch.current(launch)) then
+     veh:setClusterPosRelRot(-1, 0, 0, st.placeZ + PRE_LIFT, 0, 0, 0, 1)
+     veh:applyClusterVelocityScaleAdd(-1, 0, 0, 0, 0)
+   end
+@@ -384,6 +426,7 @@
+ 
+   st.anchor, st.anchorId, st.anchorKey = geodesy.newAnchor(msg.lat, msg.lon), msg.anchorId, msg.anchorKey
+   st.anchorSession, st.resync = st.sessionId, false
++  recordLaunchImport(msg, ok) -- actual import, including delayed resync phase 2
+   st.block, st.terrainPending, st.terrainErrorAt = { cx = tr.cx, cy = tr.cy }, nil, nil
+   edgeguard.newFrame(st.guard)
+   sendCommits(msg.anchorId, tr.cx, tr.cy)
+@@ -397,7 +440,14 @@
+ -- Second phase of a rebase: everything except the vehicles, in one frame, from onUpdate.
+ local function finishRebase()
+   local rb = st.rebasing
++  if not rb then return false end
+   st.rebasing = nil
++  -- Check before importing, transforming scene objects, assigning anchorSession,
++  -- rebuilding collision, or sending commits. Status filtering is too late.
++  if rb.serverSession == nil or rb.serverSession ~= st.sessionId then
++    st.lagProbe = nil
++    return false
++  end
+   gov:heavyNow() -- phase 2 must follow phase 1's vehicle move; its frame is a heavy slot anyway
+   local sw = stopwatch.new()
+   local msg, tr, xf = rb.msg, rb.terrain, rb.xf
+@@ -418,6 +468,7 @@
+ 
+   st.anchor, st.anchorId, st.anchorKey = rb.newAnchor, msg.anchorId, msg.anchorKey
+   st.anchorSession, st.resync = st.sessionId, false
++  recordLaunchImport(msg, ok) -- actual import, including delayed resync phase 2
+   st.block, st.terrainPending, st.terrainErrorAt = { cx = tr.cx, cy = tr.cy }, nil, nil
+   edgeguard.newFrame(st.guard)
+   sendCommits(msg.anchorId, tr.cx, tr.cy)
+@@ -455,7 +506,8 @@
+ -- Phase 1 (vehicles) runs now; phase 2 (finishRebase) runs `st.rebaseLag` simulated frames later,
+ -- in onUpdate. rebaseLag starts at 0 (same frame) and is measured on every rebase: onPreRender
+ -- records after how many frames the move became visible, and the next rebase uses that.
+-local function commitRebase(msg, purpose)
++local function commitRebase(msg, purpose, serverSession)
++  if serverSession == nil or serverSession ~= st.sessionId then return false end
+   local tr, err = anchorTerrain(msg)
+   if not tr then
+     setStatus('Rebase failed: ' .. tostring(err))
+@@ -474,6 +526,7 @@
+   end
+   local m = playerId and moved[playerId]
+   st.rebasing = { msg = msg, terrain = tr, purpose = purpose, newAnchor = newAnchor, xf = xf,
++    serverSession = serverSession,
+     wait = rebaseLag, waited = 0,
+     playerOld = m and m.old or { st.player and st.player.x or 0, st.player and st.player.y or 0, st.player and st.player.z or 0 } }
+   st.lagProbe = { moved = moved, playerId = playerId, frames = 0 }
+@@ -486,10 +539,14 @@
+   return true
+ end
+ 
+-local function commitAnchor(msg, purpose)
++local function commitAnchor(msg, purpose, serverSession)
++  if serverSession == nil or serverSession ~= st.sessionId then return false end
+   if st.rebasing then finishRebase() end -- never mix two frame changes
+-  if purpose == 'teleport' or not st.anchor then return commitTeleport(msg) end
+-  return commitRebase(msg, purpose)
++  local ok
++  if purpose == 'teleport' or not st.anchor then ok = commitTeleport(msg)
++  else ok = commitRebase(msg, purpose, serverSession) end
++  if not ok then recordLaunchImport(msg, false) end
++  return ok
+ end
+ 
+ -- Terrain-follow commit (V1_1_SPEC 1a, V1_2_DESIGN 2.3), in a governor heavy slot, atomic in one
+@@ -568,6 +625,10 @@
+ end
+ 
+ local geocodeResults = {}       -- the world map's address search answers: id -> { results, error }
++-- Planet owns exactly one preview search. Reserved replies never enter the
++-- ordinary result table, even after cancellation or a core/chooser reload.
++local PLANET_GEOCODE_PREFIX = '__beamngPlanetGeocode:'
++local planetGeocode
+ local routeResults = {}         -- the GPS's planned routes: id -> { points, dist, dur, error }
+ 
+ -- The pooled shape slots (far tiles, road / building tiles) let go since the last pose, for this server; nil if none.
+@@ -577,8 +638,21 @@
+   return #out > 0 and out or nil
+ end
+ 
++-- The protocol numbers anchor ids within a TCP server session. Request ids are
++-- monotonically retained across levels; no nil identity can establish acceptance.
++local worldMessages = {anchor_ready=true,anchor_error=true,terrain_ready=true,terrain_error=true,
++  roads_tile=true,roads_drop=true,far_tile=true,far_swap=true,far_remove=true,far_done=true,far_retex=true,
++  block_base=true,ground_ahead=true,veg_tile=true,veg_drop=true,bldfar_tile=true,bldfar_drop=true,
++  navgraph=true,sea=true,gravity=true}
+ local function onMessage(msg)
+   local t = msg.type
++  if launch.managed and worldMessages[t] then
++    if launch.preview or (not st.ordinaryWorld and (not launch.consumed or not planetLaunch.current(launch))) then return end
++    if t ~= 'anchor_ready' and t ~= 'anchor_error' then
++      if st.anchorId == nil or st.anchorSession == nil or st.anchorSession ~= st.sessionId then return end
++      if msg.anchorId ~= nil and msg.anchorId ~= st.anchorId then return end
++    end
++  end
+   if t == '_connected' then
+     -- sessions: the session folders our far tiles still use (a restarted server keeps them)
+     -- slotsHeld: the pooled shape slots our objects hold, if the server is the one that sent them (a reconnect)
+@@ -591,6 +665,10 @@
+       sessions = farfield.heldSessions(), slotSession = farfield.session(), slotsHeld = held })
+     setStatus('Connected to companion server')
+   elseif t == '_disconnected' then
++    if releaseLaunchPause then releaseLaunchPause() end
++    launchGate = nil
++    planetLaunch.disconnect(launch)
++    st.rebasing, st.lagProbe = nil, nil -- phase 2 can no longer commit this server's message
+     st.pending, st.sessionId, st.terrainPending = nil, nil, nil
+     cacheInfo = nil
+     st.serverNote, st.serverNoteDetail, st.terrainErrorAt = nil, nil, nil
+@@ -600,6 +678,14 @@
+     trees.clear()
+     setStatus('Disconnected from companion server: ' .. tostring(msg.error))
+   elseif t == 'hello' then
++    if st.sessionId ~= msg.sessionId then
++      st.pending, st.terrainPending = nil, nil
++      st.rebasing, st.lagProbe = nil, nil
++      if releaseLaunchPause then releaseLaunchPause() end
++    launchGate = nil
++    planetLaunch.disconnect(launch)
++      if not st.anchor then st.autoTeleportDone = false end
++    end
+     st.sessionId = msg.sessionId
+     roads.setSession(msg.sessionId)   -- the road / building tiles' pooled shape files belong to this server
+     lastHello = {}           -- the server's version and options, for the reports' hardware.json
+@@ -656,7 +742,9 @@
+     -- per imagery source: its credit and its area (the world map credits what its view shows)
+     serverCreditsByArea = type(msg.imageryCredits) == 'table' and msg.imageryCredits or nil
+     serverOtherCredits = type(msg.otherCredits) == 'string' and msg.otherCredits or nil
+-    if st.anchor then
++    if launch.preview or (launch.managed and not st.ordinaryWorld and (not launch.consumed or not planetLaunch.current(launch))) then
++      -- Preview serves only map/search, including before an old mission exits.
++    elseif st.anchor and st.anchorSession ~= st.sessionId then
+       -- A (re)started server knows nothing of our anchor: re-register the SAME geodetic origin under
+       -- a new anchorId. The transform is then the identity, so nothing in the world moves (a shift
+       -- here could happen close to the origin, where camshift cannot tell positions from offsets).
+@@ -664,7 +752,7 @@
+       -- asked again in updateWorld).
+       st.resync = true
+       requestAnchor(st.anchor.lat, st.anchor.lon, 'resync', resyncHint())
+-    elseif st.inOurLevel and not st.anchor and not st.autoTeleportDone then
++    elseif st.inOurLevel and not st.anchor and (not st.autoTeleportDone or planetLaunch.current(launch)) then
+       st.autoTeleportDone = true
+       startTeleport()
+     end
+@@ -680,16 +768,21 @@
+   elseif t == 'anchor_ready' then
+     local p = st.pending
+     if not p or msg.requestId ~= p.requestId then return end -- stale answer
++    if p.launchId and not planetLaunch.accept(launch, p.launchId, st.sessionId, msg.requestId) then return end
+     if p.purpose == 'rebase' or (p.purpose == 'resync' and st.anchor) then
+       p.ready, p.msg = true, msg -- committed in updateWorld() (distance rule / when not paused)
+       if p.purpose == 'rebase' and p.sentAt then st.anchorLatency = st.clock - p.sentAt end
+     else
+       st.pending = nil
+-      commitAnchor(msg, p.purpose)
++      commitAnchor(msg, p.purpose, p.serverSession)
+     end
+   elseif t == 'anchor_error' then
+     local p = st.pending
+     if not p or msg.requestId ~= p.requestId then return end
++    if p.launchId then
++      if not planetLaunch.accept(launch, p.launchId, st.sessionId, msg.requestId) then return end
++      planetLaunch.fail(launch, p.launchId, 'anchorFailed')
++    end
+     st.pending = nil
+     st.retryAt = st.clock + rebase.RETRY_S
+     setStatus('Anchor request failed: ' .. tostring(msg.error))
+@@ -761,7 +854,13 @@
+   elseif t == 'route_result' then
+     if msg.id then routeResults[msg.id] = { points = msg.points or {}, dist = msg.dist, dur = msg.dur, error = msg.error } end
+   elseif t == 'geocode_result' then
+-    if msg.id then geocodeResults[msg.id] = { results = msg.results or {}, error = msg.error } end
++    if type(msg.id) == 'string' and msg.id:sub(1, #PLANET_GEOCODE_PREFIX) == PLANET_GEOCODE_PREFIX then
++      if planetGeocode and msg.id == planetGeocode.backendId then
++        planetGeocode.result = { results = msg.results or {}, error = msg.error }
++      end -- unknown/retired Planet reply: discard, with no tombstone collection
++    elseif msg.id then
++      geocodeResults[msg.id] = { results = msg.results or {}, error = msg.error }
++    end
+   elseif t == 'map_tiles_ready' then
+     -- a world map tile file is written (settings.mapTiles: the map polls every 250 ms while it misses tiles)
+   elseif t == 'navgraph' then
+@@ -864,6 +963,171 @@
+   if h.pausedByUs and simPaused() then simPause(false) end
+   h.pausedByUs = nil
+   roads.setHold(false)
++end
++
++-- Planet owns only a pause it observed itself acquiring from running physics.
++-- Stock pause request owners are private: an unknown pre-existing pause is an error.
++local function gatePause(on)
++  pauseCallOwned = true
++  simPause(on)
++  pauseCallOwned = false
++end
++releaseLaunchPause = function()
++  if launchGate and launchGate.pausedByUs and simPaused() then gatePause(false) end
++  if launchGate then launchGate.pausedByUs = nil end
++  roads.setHold(false)
++end
++local function outsidePause()
++  if pauseCallOwned or not launchGate then return end
++  if launchGate.pausedByUs or launchGate.placed then
++    launchGate.pausedByUs = nil
++    launchGate.externalPause = true
++  end
++end
++M.onSimTimePauseCalled = outsidePause
++M.simTimePauseCalled = outsidePause
++
++local function updateLaunchGate(dtReal, dtSim)
++  local g = launchGate
++  local spec = planetLaunch.current(launch)
++  if not g or not spec then return end
++  local status = planetLaunch.status(launch,spec.id)
++  if status.phase == 'ready' or status.phase == 'error' then return end
++  g.frames = g.frames + 1
++  if not g.pauseChecked then
++    g.pauseChecked = true
++    local sta = rawget(_G,'simTimeAuthority')
++    if sta and sta.getPause and sta.pause and not simPaused() then gatePause(true); g.pausedByUs=true end
++  end
++  roads.setHold(true)
++  local r = roads.launchReadiness and roads.launchReadiness(status.anchorId,g.box)
++    or {required=4,ready=0,errors={},settled=false}
++  local support = false
++  local veh = getPlayerVehicle(0)
++  local expected = spec.vehicle
++  local matches = veh and veh.getJBeamFilename and veh:getJBeamFilename() == expected.model
++    and (veh.partConfig == expected.config or veh.partConfig == 'vehicles/'..expected.model..'/'..expected.config..'.pc')
++  if g.placed and (not veh or veh:getID()~=g.vehicleId) then g.pauseError='vehicleChanged' end
++  local materials = matches and veh.isRenderMaterialsReady and veh:isRenderMaterialsReady() == true
++  -- The anchor is a height proof at the centre, not a promise of flat terrain.
++  -- Keep all footprint hits and a bounded locally planar support surface. The
++  -- nearby cardinal probes only establish collision availability beside a slope.
++  -- Tunnels retain the narrow floor rays, so a roof cannot satisfy floor support.
++  local ray=rawget(_G,'castRayStatic')
++  local bb=veh and veh.getSpawnWorldOOBB and veh:getSpawnWorldOOBB()
++  local half=bb and bb:getHalfExtents()
++  local direction=veh and veh.getDirectionVector and veh:getDirectionVector()
++  local supportDetail='notProbed'
++  if ray and half and direction and type(g.expectedZ)=='number' and r.ready == r.required and r.settled then
++    support=true; supportDetail='ok'
++    local hx,hy=half.x,half.y
++    local length=math.sqrt(direction.x^2+direction.y^2)
++    local dx,dy=direction.x/math.max(length,1e-6),direction.y/math.max(length,1e-6)
++    local offsets={{0,0},{-8,0},{8,0},{0,-8},{0,8}}
++    for _,x in ipairs({-hx,hx}) do
++      for _,y in ipairs({-hy,hy}) do offsets[#offsets+1]={dy*x+dx*y,-dx*x+dy*y,x,y} end
++    end
++    local function unsupported(reason)
++      if support then supportDetail=reason end
++      support=false
++    end
++    if hx~=hx or hy~=hy or hx<=0 or hy<=0 or hx+hy>g.radius or length<1e-3 then unsupported('invalidFootprint') end
++    local corners={}
++    for index,offset in ipairs(offsets) do
++      -- A 1:1 grade bounds the ray search; centre and tunnel envelopes stay 0.8 m.
++      local allowance=g.tunnel and 0 or math.sqrt(offset[1]^2+offset[2]^2)
++      local from=vec3(offset[1],offset[2],g.expectedZ+2+allowance)
++      local reach=6+2*allowance
++      local d=ray(from,vec3(0,0,-1),reach)
++      if type(d)~='number' or d~=d or d<0 or d>=reach then
++        unsupported('missingHit:'..index)
++      else
++        local height=from.z-d
++        if math.abs(height-g.expectedZ)>0.8+allowance then unsupported('heightMismatch:'..index) end
++        if offset[3] then corners[#corners+1]={offset[3],offset[4],height-g.expectedZ} end
++      end
++    end
++    if support and not g.tunnel then
++      local mean,sx,sy=0,0,0
++      for _,c in ipairs(corners) do mean=mean+c[3]/4; sx=sx+c[1]*c[3]/(4*hx*hx); sy=sy+c[2]*c[3]/(4*hy*hy) end
++      if #corners~=4 or math.abs(mean)>0.8 or sx*sx+sy*sy>1 then unsupported('footprintSlope') end
++      for _,c in ipairs(corners) do
++        if math.abs(c[3]-mean-sx*c[1]-sy*c[2])>0.35 then unsupported('footprintDiscontinuity') end
++      end
++    end
++  end
++  local camera=rawget(_G,'core_camera')
++  local cameraReady=false
++  if veh and camera and camera.getActiveCamName and camera.getActiveCamNameByVehId then
++    local name=camera.getActiveCamName(0)
++    cameraReady=name~=nil and name==camera.getActiveCamNameByVehId(veh:getID())
++  end
++  local covers=false
++  if st.block then
++    local x1,y1,x2,y2=lattice.groundBox(st.block.cx,st.block.cy)
++    covers=x1 <= -144 and y1 <= -144 and x2 >= 144 and y2 >= 144
++  end
++  local meshSurface=nearVisual=='mesh' or (nearVisual=='detail' and M.rawView())
++  local surface={required=1,ready=terrain.isRenderEnabled() and 1 or 0,errors={}}
++  if meshSurface then
++    surface=farfield.launchReadiness and farfield.launchReadiness(st.sessionId,st.anchorId,g.box)
++      or {required=16,ready=0,errors={},errorCode='nearSurfaceApiUnavailable'}
++  end
++  local rendered=surface.required>0 and surface.ready==surface.required
++  if surface.errors and #surface.errors>0 then surface.errorCode='nearSurfaceFailed' end
++  local nonphysics=support and materials and cameraReady and covers and st.active
++    and not st.terrainPending and not st.rebasing and rendered
++    and status.serverSession~=nil and status.serverSession==st.sessionId
++    and status.anchorId~=nil and status.anchorId==st.anchorId and status.commitSerial==launch.serial
++  if nonphysics and not g.placed then
++    local sta=rawget(_G,'simTimeAuthority')
++    if not sta or not sta.pause or not sta.getPause then g.pauseError='pauseApiUnavailable'
++    elseif simPaused() and not g.pausedByUs then
++      g.pauseError=g.externalPause and 'pauseOwnershipChanged' or 'pauseOwnershipUnavailable'
++    end
++  end
++  if g.placed and simPaused() then g.pauseError='pauseOwnershipChanged' end
++  if nonphysics and not g.placed and not g.pauseError then
++    placePlayer(g.expectedZ+1)
++    g.placed,g.placeFrame,g.vehicleId=true,g.frames,veh:getID()
++    if g.pausedByUs then gatePause(false); g.pausedByUs=nil end
++  end
++  local placed=g.placed and g.frames>g.placeFrame+1
++  if placed and veh then
++    local p=veh:getPosition()
++    local bottom=bb and bb:getCenter().z-half.z
++    if p.x*p.x+p.y*p.y>1 or not bottom or bottom~=bottom or math.abs(bottom-g.expectedZ)>0.8 then
++      g.pauseError='badPlacement'
++    end
++  end
++  local facts={id=spec.id,serverSession=status.serverSession,anchorId=status.anchorId,commitSerial=status.commitSerial,
++    currentSession=st.sessionId,currentAnchor=st.anchorId,currentCommit=launch.serial,
++    terrain=st.active,importsComplete=not st.terrainPending and not st.rebasing,
++    rendered=rendered,nearSurface=surface,nearMode=meshSurface and 'mesh' or 'terrain',
++    covers=covers,roads=r,support=support,
++    vehicle=matches,materials=materials,placed=placed,camera=cameraReady,
++    position=veh and veh:getPosition(),velocity=veh and veh:getVelocity(),
++    upZ=veh and veh.getDirectionVectorUp and veh:getDirectionVectorUp().z,
++    physicsDt=dtSim or 0,errorCode=g.pauseError or r.errorCode or surface.errorCode}
++  local value=planetReadiness.update(g,facts,dtReal)
++  local diagnostic=table.concat({tostring(value.phase),tostring(value.blockedReason),
++    tostring(r.ready)..'/'..tostring(r.required),tostring(support),tostring(matches),
++    tostring(materials),tostring(cameraReady),tostring(g.placed)},'|')
++  if g.diagnostic ~= diagnostic or st.clock-(g.diagnosticAt or 0)>=30 then
++    g.diagnostic,g.diagnosticAt=diagnostic,st.clock
++    local p=veh and veh:getPosition()
++    log('I','beamngPlanetReadiness','id='..spec.id..' '..diagnostic..' expectedZ='..tostring(g.expectedZ)
++      ..' player='..tostring(p and p.x)..','..tostring(p and p.y)..','..tostring(p and p.z)
++      ..' supportDetail='..supportDetail..' roadStats='..(jsonEncode and jsonEncode(roads.status()) or 'unavailable'))
++  end
++  for k,v in pairs(value) do launch.value[k]=v end
++  launch.value.blockedReason=value.blockedReason
++
++  if value.phase=='error' then
++    -- Freeze a failed placement only when no external owner changed pause.
++    if not g.externalPause and not simPaused() then gatePause(true); g.pausedByUs=true end
++    roads.setHold(false)
++  elseif value.phase=='ready' then releaseLaunchPause(); launchGate=nil end
+ end
+ 
+ local function updateDropHold(dt)
+@@ -1025,7 +1289,7 @@
+     -- terrain-follow waits meanwhile, its state belongs to the frame that is about to change
+     if gov:requestHeavy() then
+       st.pending = nil
+-      commitAnchor(p.msg, p.purpose)
++      commitAnchor(p.msg, p.purpose, p.serverSession)
+     end
+     return
+   elseif action == 'discard' then
+@@ -1378,7 +1642,7 @@
+ 
+   updatePlayer(dtReal)
+   if st.active then
+-    if not dropHoldFailed and (not st.paused or dropHold.active) then     -- (it runs on while it paused the game)
++    if not launchGate and not dropHoldFailed and (not st.paused or dropHold.active) then     -- (it runs on while it paused the game)
+       local ok, err = pcall(updateDropHold, dtReal)
+       if not ok then          -- never break the frame: off for the session, said once
+         dropHoldFailed = true
+@@ -1394,6 +1658,7 @@
+     -- teleport the far field's hundreds of tiles took it frame after frame and the road meshes under the car
+     -- came after it had passed (Brasov, Sinaia 2026-10-15: the car drove bare ground)
+     roads.update(gov, st.anchorId, st.player)
++    updateLaunchGate(dtReal, dtSim)
+     t = mark('roads', t)
+     farfield.update(gov, (gov.w1 or dtReal * 1000) / 1000, st.cam, st.player)
+     t = mark('far', t)
+@@ -1451,6 +1716,9 @@
+ -- level lifecycle
+ 
+ local function onLevelStart()
++  -- A repeated lifecycle callback must not discard the request it just issued.
++  if launch.consumed and planetLaunch.current(launch) and st.inOurLevel
++      and getCurrentLevelIdentifier() == LEVEL_ID then return end
+   -- the connection outlives levels: keep its session and the request id sequence
+   local sessionId, nextRequestId, mapPort = st.sessionId, st.nextRequestId, st.mapPort
+   resetState()
+@@ -1475,7 +1743,8 @@
+   else
+     setStatus('Flat terrain failed: ' .. tostring(err))
+   end
+-  if net.isConnected() then
++  if planetLaunch.current(launch) then planetLaunch.consume(launch, LEVEL_ID) end
++  if net.isConnected() and st.sessionId ~= nil then
+     st.autoTeleportDone = true
+     startTeleport()
+   end
+@@ -1548,14 +1817,15 @@
+ 
+ -- kind: 'teleport' (M.teleport) or 'start' (the level start's), for the recent places list; 'tool'
+ -- (M.teleport with opts.record == false: test tools like tools/benchmark.lua) is not recorded
+-teleportTo = function(lat, lon, name, kind)
++teleportTo = function(lat, lon, name, kind, launchId)
++  if not launchId and not st.ordinaryWorld and not planetLaunch.ordinaryAllowed(launch) then return false end
+   lat, lon = tonumber(lat), tonumber(lon)
+   if not lat or not lon or lat < -90 or lat > 90 or lon < -180 or lon > 180 then
+     setStatus('Teleport: invalid lat/lon')
+     return false
+   end
+   ui.setLatLon(lat, lon)
+-  if requestAnchor(lat, lon, 'teleport') then
++  if requestAnchor(lat, lon, 'teleport', nil, nil, launchId) then
+     setStatus(string.format('Preparing terrain at %.5f, %.5f ...', lat, lon))
+     parking.onTeleport()
+     navgraph.onTeleport()
+@@ -1567,6 +1837,37 @@
+     return true
+   end
+   return false
++end
++
++-- Explicit, version-pinned Planet API. Readiness is added separately; these
++-- statuses publish identity/import facts and never claim the world is ready.
++local function stopLaunchWorld()
++  st.pending, st.terrainPending, st.rebasing, st.lagProbe = nil, nil, nil, nil
++  st.anchor, st.anchorId, st.anchorKey, st.anchorSession = nil, nil, nil, nil
++  st.block, st.player, st.placeFrames, st.floorZ, st.floorUntil = nil, nil, nil, nil, nil
++  st.active, st.resync, st.autoTeleportDone, st.ordinaryWorld = false, false, true, false
++end
++function M.stageLaunch(spec)
++  local result = planetLaunch.stage(launch,spec)
++  if result.ok then
++    releaseLaunchPause(); launchGate=nil; planetGeocode=nil
++    stopLaunchWorld() -- the previous world cannot issue work for the new selection
++  end
++  return result
++end
++function M.getLaunchStatus(id) return planetLaunch.status(launch, id) end
++function M.cancelLaunch(id)
++  local result = planetLaunch.cancel(launch, id)
++  if result.ok then releaseLaunchPause(); launchGate=nil end
++  if result.ok then stopLaunchWorld() end
++  return result
++end
++function M.setPlanetPreview(token)
++  local result = planetLaunch.preview(launch, token)
++  if result.ok and planetGeocode and planetGeocode.owner ~= token then planetGeocode=nil end
++  if result.ok and token ~= nil then releaseLaunchPause(); launchGate=nil end
++  if result.ok and token ~= nil then stopLaunchWorld() end
++  return result
+ end
+ 
+ -- name (optional): the place's name for the recent places (places.lua; the settings page's Go);
+@@ -1736,6 +2037,33 @@
+   routeResults[id] = nil
+   return r
+ end
++-- UI request ids are local to their owner; backend ids are globally fresh in
++-- this engine VM, including across reloading this module with the same UI id.
++function M.requestPlanetGeocode(owner, id, q, lat, lon)
++  if type(owner) ~= 'string' or owner ~= launch.preview or type(id) ~= 'string' or #id < 1 or #id > 128 then return false end
++  if type(q) ~= 'string' or #q < 3 or #q > 1024 then return false end
++  if type(lat) ~= 'number' or type(lon) ~= 'number' or lat ~= lat or lon ~= lon or math.abs(lat) > 90 or math.abs(lon) > 180 then return false end
++  planetGeocode = nil
++  if not net.isConnected() then return false end
++  local serial = (rawget(_G, 'beamngPlanetGeocodeSerial') or 0) + 1
++  rawset(_G, 'beamngPlanetGeocodeSerial', serial)
++  local backendId = PLANET_GEOCODE_PREFIX .. string.format('%.0f', serial)
++  planetGeocode = {owner=owner, id=id, backendId=backendId}
++  net.send({type='geocode', id=backendId, q=q, lat=lat, lon=lon})
++  return true
++end
++function M.takePlanetGeocode(owner, id)
++  if not planetGeocode or planetGeocode.owner ~= owner or planetGeocode.id ~= id then return nil end
++  local result = planetGeocode.result
++  if result then planetGeocode = nil end
++  return result
++end
++function M.cancelPlanetGeocode(owner)
++  if not planetGeocode or planetGeocode.owner ~= owner then return false end
++  planetGeocode = nil
++  return true
++end
++
+ function M.takeGeocode(id)
+   local r = geocodeResults[id]
+   geocodeResults[id] = nil

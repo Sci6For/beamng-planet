@@ -1,0 +1,25 @@
+{
+  "gameFiles": {
+    "ui/ui-vue/src/modules/mainmenu/views/MainGridView.vue": "986208472a60e5dfa9812faeddb86fb75898a2e2b49cf9d294c32e92455446a9",
+    "ui/ui-vue/src/modules/mainmenu/views/MainMenu.vue": "97a1e76871ab5e7e889b314d9667dea0c244905794e20754a580454292bca1e8",
+    "ui/ui-vue/src/modules/mainmenu/routes.js": "bfa719e480005e91568f0f9ab3e7e1ecf5293e52f3fc16d6cc3a9f14297749be",
+    "ui/ui-vue/src/router/index.js": "c772ee6872dd7ad534cb1b59ebd4c962393bcdd3f293618462560a52840c1a1a",
+    "ui/ui-vue/src/services/popup.js": "4bc200bd9ef09e67cb38823b7ac9ab9f01e116801463d6b00ad9a0b88141e586",
+    "ui/ui-vue/src/common/modules/popup/views/Popup.vue": "eec4bd22d285d1b53d91f75c86a06f7691e067a301bc26d79e4768679c5cc0e4",
+    "ui/ui-vue/src/modules/vehicleselect/views/VehicleSelector.vue": "63d296b8fa70c3db1c7b937caab560cf1d97826e32200880949b4fd89f6a0981",
+    "lua/ge/extensions/freeroam/freeroam.lua": "a46edaa0f559dbcc58ac1c3cc8ab032273871a680ebf53b4902d22336fb42263",
+    "lua/ge/extensions/freeroam/freeroamConfigurator.lua": "8284592b01a402efdab0ef8fb1cf2d078af5403ff7c05759e0a6f483790977fb",
+    "lua/ge/extensions/ui/router/routeManager.lua": "f90b175ed609b2da7dfef37f7c9c2b1992b8c5d445650ddbda5597a8ac80dbef",
+    "lua/ge/extensions/ui/vehicleSelector/general.lua": "6f5ff9df5007af7e7e4dd4dd1a6a7ac0bc3e7101b0be0040f296f0d5294d0a14",
+    "lua/ge/extensions/core/input/actionFilter.lua": "eb9c3c1d04f1dc27af688a0cd8baaf225953a42362c70d1f69703a15a2461ba9",
+    "lua/ge/main.lua": "90cf78ecf322381af547abd8c101c92a7cf61a70083559f97bf4ea63024e4a95",
+    "lua/ge/extensions/core/gamestate.lua": "01be67ccb4f93b4511f5474fb4111200c05e753d8776095d4396c88ca6ee784a",
+    "lua/ge/extensions/freeroam/configuratorOptions/freeroamOptions.lua": "a02fbbd9a67bbb00a8c50eccae90f06835d3cc486439f5d8bd28f98bbd6c92eb",
+    "lua/common/extensions.lua": "e86a47eebe280ff0ab86a1f65935e010a0bd223aa5a12043fd53a04555d4b5a5",
+    "ui/ui-vue/src/modules/mainmenu/components/buttons/Huge2.vue": "4c2f92a0df7a9fa2acbb410db1dacde93b9d5f3616c0322c107f6368113a7789",
+    "lua/ge/extensions/gameplay/traffic/trafficUtils.lua": "d057078ba10677ae4f87ecab64165115b9d2a2d08379fd66c1750b1b6b9e51d8",
+    "lua/ge/extensions/core/groundMarkers.lua": "af6a06c7a8527ad943c4b627908d1bf54622b0b9d265db37ffa3e212f34256bd",
+    "lua/ge/extensions/core/groundMarkerArrows.lua": "dd81422de6974fea6684f9a78691f01df345c1e6fd1da075f8a906dccd40882f",
+    "lua/ge/extensions/gameplay/route/route.lua": "34bef0676a4931efbbfa74d1aab10ce52e00b84a765f0a0e78c894379f73e860"
+  }
+}

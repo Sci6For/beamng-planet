@@ -1,0 +1,9 @@
+target/
+artifacts/
+build/
+dist/
+__pycache__/
+*.pyc
+*.pyd
+*.exe
+.env*

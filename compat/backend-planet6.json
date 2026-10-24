@@ -1,0 +1,31 @@
+{
+  "backendVersion": "1.5.4-planet6",
+  "sha256": "f1187d7decaf37e3b7a62b637921c972bd311def3ee4229d509f67024ec2dabd",
+  "source": "vendor/earth154",
+  "buildRecord": "artifacts/backend-planet6/build.json",
+  "sourceHashesVerified": 69,
+  "nativeSha256": "421facf18007fec126766b9234ed48f79701210ee2bcdcb2dfd456b200ded2a3",
+  "clientBaseVersion": "1.5.3-beta",
+  "protocol": 4,
+  "contentFormat": 4,
+  "package": "artifacts/planet-generation-repair-20261021",
+  "packageManifestSha256": "45b0ef3b2769292e744bc08c60eff3aca7fb27783d01bb737eae536506500a01",
+  "installedOwnershipVerified": true,
+  "vegetationCacheVersion": 16,
+  "waterCacheVersion": 17,
+  "compiledProbe": "artifacts/road-probe/ridder-planet6",
+  "evidence": [
+    "artifacts/generation-repair-planet6",
+    "artifacts/city-regional-probe/line-water-check.json"
+  ],
+  "liveVisualAcceptance": false,
+  "limits": [
+    "Missing source building types and facade colours still require procedural defaults; no guessed garage conversion.",
+    "Regional appearance overrides from planet5 reverted; whole-building appearance now follows feature ID.",
+    "River cross-section checks do not establish visual acceptance of every bend or coarse terrain shore.",
+    "Ground-model resolution remains 2 m; road raster rounding is a bounded fix, not proof of no grass intersections.",
+    "Mapped ground pedestrian paths remain global; stairs and elevated spans are unsupported.",
+    "No new assets, exact architecture reconstruction, railway renderer or potholes in this repair.",
+    "In-game FPS, native exit crash and all water anomalies were not verified or claimed fixed."
+  ]
+}

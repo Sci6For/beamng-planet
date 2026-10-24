@@ -1,0 +1,131 @@
+--- a/lua/ge/extensions/beamngEarth/core.lua
++++ b/lua/ge/extensions/beamngEarth/core.lua
+@@ -101,6 +101,7 @@
+ local planetReadiness = require('beamngEarth/planetReadiness')
+ local launchGate, releaseLaunchPause
+ local pauseCallOwned = false
++local planetSession, planetFrameTxn
+ local st -- all runtime state, see resetState()
+ local rebaseLag = 0 -- frames between a vehicle move request and its visibility (measured, see commitRebase)
+ local roadsSession = nil -- the server session whose road tiles are shown (roads.lua)
+@@ -454,7 +455,7 @@
+   local ok, err = loadBlock(tr)
+   -- the world shifts under the grass: made fresh (with tools/gcpatch the engine would keep it)
+   groundcover.rebuild()
+-  if not ok then log('E', 'beamngEarth', 'rebase terrain import failed: ' .. tostring(err)) end
++  if not ok then log('E', 'beamngEarth', 'rebase terrain import failed: ' .. tostring(err));if planetSession and planetFrameTxn then planetFrameTxn.errorCode='frameImportFailed';return false end end
+   farfield.transform(xf)
+   -- roads, buildings, street furniture and trees move with it and stay until the new anchor's tiles cover them
+   roads.transform(xf, geodesy)
+@@ -744,7 +745,7 @@
+     serverOtherCredits = type(msg.otherCredits) == 'string' and msg.otherCredits or nil
+     if launch.preview or (launch.managed and not st.ordinaryWorld and (not launch.consumed or not planetLaunch.current(launch))) then
+       -- Preview serves only map/search, including before an old mission exits.
+-    elseif st.anchor and st.anchorSession ~= st.sessionId then
++    elseif not planetSession and st.anchor and st.anchorSession ~= st.sessionId then
+       -- A (re)started server knows nothing of our anchor: re-register the SAME geodetic origin under
+       -- a new anchorId. The transform is then the identity, so nothing in the world moves (a shift
+       -- here could happen close to the origin, where camshift cannot tell positions from offsets).
+@@ -766,6 +767,12 @@
+     -- M1h: the far-field radius rides on every status in horizon mode (the view distance follows it)
+     if msg.radius ~= nil then M.setFarRadius(msg.radius) end
+   elseif t == 'anchor_ready' then
++    if planetSession and planetFrameTxn and planetFrameTxn.dynamic and msg.requestId == planetFrameTxn.operation then
++      local tr = anchorTerrain(msg)
++      if not tr then planetFrameTxn.errorCode='frameTerrainInvalid';return end
++      planetFrameTxn.message,planetFrameTxn.prepared = msg,true
++      return
++    end
+     local p = st.pending
+     if not p or msg.requestId ~= p.requestId then return end -- stale answer
+     if p.launchId and not planetLaunch.accept(launch, p.launchId, st.sessionId, msg.requestId) then return end
+@@ -1224,7 +1231,7 @@
+   end
+ 
+   -- a resync the server could not build (anchor_error: offline, never visited) is asked again
+-  if st.resync and not st.pending and st.sessionId and st.clock >= st.retryAt then
++  if not planetSession and st.resync and not st.pending and st.sessionId and st.clock >= st.retryAt then
+     requestAnchor(st.anchor.lat, st.anchor.lon, 'resync', resyncHint())
+   end
+ 
+@@ -1241,7 +1248,7 @@
+     local x0, y0, x1, y1 = lattice.groundBox(tr.cx or 0, tr.cy or 0)
+     edgeDist = math.min(nx - x0, x1 - nx, ny - y0, y1 - ny)
+   end
+-  local action = rebase.decide(pl.dist, p, staleDist, st.clock, st.retryAt, edgeDist)
++  local action = not planetSession and rebase.decide(pl.dist, p, staleDist, st.clock, st.retryAt, edgeDist)
+   if p and p.ready and p.purpose == 'resync' then
+     -- the player may have driven off the terrain the server prepared meanwhile: ask again
+     if staleDist > rebase.STALE_DIST then
+@@ -2062,6 +2069,71 @@
+   if roads.setEnabled(on) then net.send({ type = 'roads_reset' }) end
+ end
+ 
++
++-- Managed coordinator owns only LAN frame changes; all ordinary rebasing stays intact.
++function M.planetBeginSession(operation,generation)
++  planetSession={operation=operation,generation=generation}
++  st.pending,st.terrainPending,st.rebasing=nil,nil,nil
++  st.resync=false
++  net.planetUseProxy(true)
++end
++function M.planetEndSession()
++  planetSession,planetFrameTxn=nil,nil
++  net.planetUseProxy(false)
++end
++function M.planetPrepareFrame(operation,frame,dynamic)
++  if not planetSession then return false end
++  planetFrameTxn={operation=operation,frame=frame,dynamic=dynamic,serial=launch.serial,prepared=false}
++  return true
++end
++function M.planetCommitFrame(operation,dynamic)
++  local t=planetFrameTxn
++  if not t or t.operation~=operation or t.committed then return false end
++  t.committed=true
++  if dynamic then
++    if not t.prepared or not t.message or not st.anchor then return false end
++    st.pending=nil
++    if not commitAnchor(t.message,'rebase',st.sessionId) then t.errorCode='frameImportFailed';return false end
++  end
++  return true
++end
++function M.planetCollisionCoverage(position,velocity,radius)
++  if not st.active or not serverHealthy() or st.rebasing or not st.anchor or not position then return false end
++  local box=guardBox();if not box then return false end
++  radius=math.max(8,tonumber(radius) or 8)
++  local vx,vy,vz=velocity and velocity[1] or 0,velocity and velocity[2] or 0,velocity and velocity[3] or 0
++  local px,py,pz=position[1],position[2],position[3]
++  local ex,ey,ez=px+vx*.5,py+vy*.5,pz+vz*.5
++  for _,pt in ipairs({{px,py,pz},{ex,ey,ez}}) do
++    if pt[1]-radius<box[1] or pt[2]-radius<box[2] or pt[1]+radius>box[3] or pt[2]+radius>box[4] then return false end
++    -- Verified imported raster extent alone is insufficient: roads/tunnels need actual collision probes.
++    if not castRayStatic then return false end
++    for _,offset in ipairs({{0,0},{-radius,-radius},{-radius,radius},{radius,-radius},{radius,radius}}) do
++      local ray=castRayStatic(vec3(pt[1]+offset[1],pt[2]+offset[2],pt[3]+3),vec3(0,0,-1),15)
++      if type(ray)~='number' or ray~=ray or ray<0 or ray>=15 then return false end
++    end
++  end
++  return true
++end
++function M.planetCurrentFrame()
++  return st.anchor and {lat=st.anchor.lat,lon=st.anchor.lon,serverSession=st.sessionId,anchorId=st.anchorId,commitSerial=launch.serial} or nil
++end
++function M.planetFrameStatus()
++  local t=planetFrameTxn;if not t then return nil end
++  local msg=t.message
++  local b={operation=t.operation,prepared=t.prepared,errorCode=t.errorCode,serverSession=st.sessionId,
++    anchorId=t.dynamic and not t.committed and msg and msg.anchorId or st.anchorId,
++    commitSerial=launch.serial,applied=false}
++  if t.committed and not st.rebasing and st.active and st.anchorSession==st.sessionId then
++    local v=getPlayerVehicle(0);local pos=v and v:getPosition();local vel=v and v:getVelocity()
++    local identity=not t.dynamic or (msg and st.anchorId==msg.anchorId)
++    if identity and pos and vel and not t.errorCode then
++      if t.dynamic and not t.appliedSerial then launch.serial=launch.serial+1;t.appliedSerial=launch.serial end
++      b.commitSerial=launch.serial;b.applied=M.planetCollisionCoverage({pos.x,pos.y,pos.z},{vel.x,vel.y,vel.z},4) end
++  end
++  return b
++end
++
+ M.onUpdate = onUpdate
+ M.onPreRender = onPreRender
+ M.onUiChangedState = onUiChangedState

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "scope": "Earth 1.5.4 physical generation in strict Planet LAN mode",
+  "snapshotBoundary": "roomId + revision; frame identity and fixed quantum are per anchor/job",
+  "physicalInputs": [
+    {
+      "provider": "DEM",
+      "reads": ["dem.Dem._load_tile", "dem.Dem.sample", "dsmground.ground"],
+      "source": "Mapterhorn tiles and contextual ground filtering",
+      "pin": "decoded float32 tile after ground filtering, keyed by z/x/y",
+      "strictFailure": "AWS failover, missing tile, partial ground filter or unreadable pin rejects the job",
+      "consumers": ["heightmap", "grading", "roadmesh", "airportgrade", "seacarve lake levels", "vegetation rock slopes", "buildings", "riverlines"]
+    },
+    {
+      "provider": "mapdata",
+      "reads": ["mapdata.MapData.layer_arrays", "mapdata.MapData.cell", "surface.Surface"],
+      "source": "Overture vector cell NPZ and WorldCover/CHM raster cell NPZ",
+      "layers": ["roads", "connectors", "buildings", "building_parts", "water", "land_use", "infrastructure", "land", "landcover", "canopy"],
+      "pin": "complete NPZ bytes per release/layer/z/x/y; bypass writable mirror and decoded LRU; a vector cell with zero features needs a verified Overture release-index/query coverage marker, with the collection rechecked remotely once per reader; old unverified empty caches are rebuilt before pinning; landcover without source files is rejected",
+      "consumers": ["road grading and arch/tunnel holes", "ground material masks", "road/deck/tunnel/sidewalk/building colliders", "sea and river floors", "vegetation and rocks", "street widths"]
+    },
+    {
+      "provider": "street widths",
+      "reads": ["roadwidth.RoadWidths", "roadwidth._read_segs", "roadwidth._read_index"],
+      "source": "pinned buildings and roads map layers",
+      "pin": "derived store disabled in LAN; recalculate from pinned map layers"
+    },
+    {
+      "provider": "airports",
+      "reads": ["airports.Store", "airportgrade.AirportGrader", "blockworker.load_airports"],
+      "source": "OurAirports airports.csv and runways.csv from one complete generation",
+      "pin": "both CSV byte streams in one atomic room pin; parse before admission",
+      "consumers": ["runway ground grading", "runway collision/marking meshes", "road rules country"]
+    },
+    {
+      "provider": "water",
+      "reads": ["seacarve.SeaCarver", "seatiles", "riverlines"],
+      "source": "pinned water map layers, pinned DEM, NOAA bathymetry response",
+      "pin": "complete derived depth/level/outline raster per cell; missing bathymetry rejects admission",
+      "consumers": ["carved terrain height and ground material", "sea/lake/river surfaces", "bridge clearance"]
+    },
+    {
+      "provider": "vegetation",
+      "reads": ["vegetation.Vegetation", "vegetation._slope"],
+      "source": "pinned canopy/landcover/buildings/roads/water/land use/land map layers and DEM",
+      "pin": "complete derived Items per cell; incomplete forest/field reads or DEM slope reject admission",
+      "consumers": ["tree, shrub and rock collision shapes"]
+    },
+    {
+      "provider": "frame and generator",
+      "reads": ["heightmap.generate", "heightmap.write_png", "earthd.anchor_q", "blockworker.build", "fast native extension"],
+      "source": "per-anchor ENU origin, 2 m lattice, fixed frame quantum, physical CLI options and generator/native versions",
+      "pin": "room config fingerprint includes exact Python producer hashes and native extension version/hash; per-job frame ID/epoch; quantum overflow rejects the block"
+    }
+  ],
+  "derivedPhysicalArtifacts": ["heightmap PNG", "terrain TER with ground-model indices", "surface masks", "road/deck/tunnel/sidewalk/building colliders", "vegetation/rock shapes"],
+  "renderOnly": ["satellite imagery", "far photographic base", "deshadow/colour matching", "sky", "weather visuals", "far textures", "noncolliding road/building draw meshes"],
+  "activation": "Server.activate_world requires no preview anchors, terrain/tile artifacts or in-flight jobs and no external road/far worker pools; Task 5 binds a PhysicsFrame to each connection before prepare_anchor. Recreate workers after draining preview jobs or start a fresh backend.",
+  "knownLimits": [
+    "Terrain worldManifest covers per-job pinned sources and actual heightmap/TER/mask bytes; road, building, water and vegetation artifact manifests still need output-level wiring in Task 5/6.",
+    "Task 5/6 must propagate and enforce the backend/native fingerprint plus client/game fingerprints in the room descriptor before two peers agree.",
+    "A real two-game collision overlap and long-travel handoff have not been measured."
+  ]
+}

@@ -1,0 +1,26 @@
+--- a/ui/ui-vue/mods/beamngEarth/EarthMap.vue
++++ b/ui/ui-vue/mods/beamngEarth/EarthMap.vue
+@@ -1,5 +1,6 @@
+ <template>
+   <div class="earth-map" :class="{ embedded }" @keydown.esc.stop="onEscape" tabindex="-1" ref="rootEl">
++    <PlanetAudio class="planet-driving-audio" />
+     <!-- the map itself: tiles, the lat/lon grid, markers -->
+     <div
+       class="map-view"
+@@ -236,6 +237,7 @@
+ </template>
+ 
+ <script setup>
++import PlanetAudio from "../beamngPlanet/PlanetAudio.vue"
+ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue"
+ import * as mm from "./mapmath.js"
+ import layerData from "./maplayers.js"
+@@ -931,6 +933,8 @@
+ </script>
+ 
+ <style scoped>
++.planet-driving-audio { position:absolute; left:1rem; bottom:3rem; z-index:30; width:22rem; max-width:calc(100% - 2rem); }
++
+ .earth-map {
+   position: absolute;
+   inset: 0;

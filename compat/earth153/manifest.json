@@ -1,0 +1,197 @@
+{
+  "formatVersion": 1,
+  "version": "1.5.3-beta",
+  "sourceCommit": "011d6b54e42407b2f3a6deaddc47305cf2325a47",
+  "sourceDirectory": "mod/beamng_earth",
+  "originalFiles": {
+    "art/beamngEarth/detail_ground.dds": "d89c62cbc0ce0a5f821dc307f87ed6affbf8fb2cfef00e9a4d3f95e8be50999f",
+    "levels/beamng_earth/art/runway/main.materials.json": "65e2bde83643092dcd2ff16ba9dfcf99a8d6ca719f7836f1fc586d8eeb6a5efc",
+    "levels/beamng_earth/art/runway/t_paint_white_b.color.png": "9f5684d5db858f3a981176aadddb5579146a6f1595abb51959b5ade188bc2049",
+    "levels/beamng_earth/art/runway/t_paint_yellow_b.color.png": "36458fb0abdda2132d241790c3e558f078a4161d521d7efae05f3fa6d699b6d8",
+    "levels/beamng_earth/art/shapes/beamngEarth/buildings.materials.json": "4875f1939172d0f5e312b542fbd43a51585ee86834e2478482a58e5a71e0dcd1",
+    "levels/beamng_earth/art/shapes/beamngEarth/far_palette.png": "236a7ab8a9fc1038c12c12735a1bbfae8eb4c2d8dd98e339895dfd18ee462c19",
+    "levels/beamng_earth/art/shapes/beamngEarth/main.materials.json": "8b1e5513fba9f71431b2ef1b64a7ae6da92008b99c850e22283eb1d456457a07",
+    "levels/beamng_earth/art/shapes/beamngEarth/tunnel.materials.json": "192a512316873058a19ffe3154f5d7257ba354453a2ff8bf638abe0e01247696",
+    "levels/beamng_earth/art/terrains/beamngEarth_flat_1024.png": "68733df894d47a9578e0c3dcd0bbcb38b4675b406c5ea6d059e42e0a7cb6a43b",
+    "levels/beamng_earth/art/terrains/beamngEarth_flat_512.png": "5fc7d169d05868cdf69e8e3c37c35bd399ce7198218a1d033bb4fc675cc4a917",
+    "levels/beamng_earth/art/terrains/beamngEarth_layer_1024.png": "c98a86e4558781ad0abe9c23ea463ac000cf38d25f2db7860e73661a1224ff46",
+    "levels/beamng_earth/art/terrains/beamngEarth_layer_512.png": "dcd927b55e091e2eb0d779d6e8d8fa669e6b8c42a7cd76fa300a1413f1568ad6",
+    "levels/beamng_earth/art/terrains/bngEarth_base_ao.png": "c55a575af66871a05ec1684c4a5f5b3dfc6fcb4053e339357cc716458784d5f0",
+    "levels/beamng_earth/art/terrains/bngEarth_base_b.png": "5d810cd3c6f9d4fb740323cdeb615d3fa5d6a24ab724a979ea8ad314d4d61d44",
+    "levels/beamng_earth/art/terrains/bngEarth_base_h.png": "437b3144834e865860784ee7595ccf49bfabaa9601e0c998304c100ec58857c5",
+    "levels/beamng_earth/art/terrains/bngEarth_base_nm.png": "72f0f964470fea5fbc7b9ba96f8c7fb4825d380934fb8cd843edf8e5f878457e",
+    "levels/beamng_earth/art/terrains/bngEarth_base_r.png": "3c1aa1fd32da47608842213edde7fea75147cae552b96c2cecce02f5956d816d",
+    "levels/beamng_earth/art/terrains/bngEarth_flat_h_1024.png": "27653a34f74adf04894200466c2cb44f92f59134ba49b4acdb0a48b7a82ebb3d",
+    "levels/beamng_earth/art/terrains/main.materials.json": "507a35c37e941db1e70f1dc662599629d8424057fe804331196e1a93909b6890",
+    "levels/beamng_earth/beamng_earth_preview.jpg": "991f2dc9fd0d365b858da13aec10b114e789dd42ca720bd34632d87ebacdc96b",
+    "levels/beamng_earth/forest/empty.forest4.json": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "levels/beamng_earth/info.json": "58e798d64e6b5e1ae4790b3771f0351c3af111ea5eb31ea04914a72929bb570a",
+    "levels/beamng_earth/main/items.level.json": "f42ab737ee763e88e1319190b84307bb6f7f2e3256a9a7d04b17411547b5968a",
+    "levels/beamng_earth/main/MissionGroup/items.level.json": "4782c769d6b1e7e0a2a066f1a432f0974a9e16a887ca782c2f01e8c493b6136c",
+    "levels/beamng_earth/main/MissionGroup/PlayerDropPoints/items.level.json": "f20c9ff423e4bcf271aaed9da2deaef2c5fa8c46ba97729ee0f27b3cde42e128",
+    "levels/beamng_earth/main/MissionGroup/Sky/items.level.json": "37714c03fc3f1272e684f09766d4045aa2196efed2889ac49c2f3b71974ae82c",
+    "levels/beamng_earth/main/MissionGroup/Weather/items.level.json": "8f0482a1c91f11d7563d804b890f0fa0087e020be4707a51bce13cc55044ff59",
+    "lua/ge/extensions/beamngEarth/banner.lua": "9a9b366d1ef9e3be47a4555192717920bb8fe228c5db6d96056004d9472f92c5",
+    "lua/ge/extensions/beamngEarth/camshift.lua": "1b784e1ad9ab398ea597e4887632989e60d906add2617f8e306b7f5c76254ae1",
+    "lua/ge/extensions/beamngEarth/core.lua": "a02fb8eb0097845e262d4cc0614118effb97ac376185120f7d5c56213d1401d5",
+    "lua/ge/extensions/beamngEarth/credits.lua": "69167a00a1b249f189e0212b650f10d29b9c56c000620bf8aa98b712c6ac8696",
+    "lua/ge/extensions/beamngEarth/crossover.lua": "43e5dd521a3756999f2e36ea8e521480b42ccab3649642a36e99356c6f11b17a",
+    "lua/ge/extensions/beamngEarth/dev.lua": "63104ae1204080c5989d77c99d5accfccdb9a48f43bf29b19719489372161d11",
+    "lua/ge/extensions/beamngEarth/drophold.lua": "efa1e397d7d68b4d26721f08a11e91a9016e80e9c74cdf1ec29cfe1eb8e31f1a",
+    "lua/ge/extensions/beamngEarth/edgeguard.lua": "6274eb80a4847fef6d2614956577dcc0b5468ecd2fd25e2f10a99e65f0014d47",
+    "lua/ge/extensions/beamngEarth/farfield.lua": "021f98ba4652d7074f0cec04982f4337fc51fd69c48129e3f2b4929d994cd047",
+    "lua/ge/extensions/beamngEarth/follow.lua": "0e0de09e8c548775ca8fede5f25a57a0cd62b842cba7b11be6fb6e0fd44836c1",
+    "lua/ge/extensions/beamngEarth/framing.lua": "f6d489d523f20168bf7dff294634bff033f1a6050aa6f5b7c9d7c2dd04285e97",
+    "lua/ge/extensions/beamngEarth/geodesy.lua": "79a5d238f81bed46839ff4f201f6de150f9c2f728a8b1ab9e860ad787dc29434",
+    "lua/ge/extensions/beamngEarth/governor.lua": "7780f15492c31a814b7f26618c2e59ab6f6a421ba80db186ccda940002925083",
+    "lua/ge/extensions/beamngEarth/gps.lua": "e637430e3ee64b1d34bd785c5363aea349edfe591335efe01c7c9993b43c6e3e",
+    "lua/ge/extensions/beamngEarth/groundcover.lua": "2b1014bb617765bb2f393c7ab2c4a6c2455bf8851b99107443a42a55489e3e3f",
+    "lua/ge/extensions/beamngEarth/horizon.lua": "14dcbbe60cdfdccb5df5ebba05e1768ae919cff22d3dde6904b20fc4631d3cd8",
+    "lua/ge/extensions/beamngEarth/hudapps.lua": "1658c3304b290f835183a98c4215917fac3698f5d0b562ddb28dcda97ff7f5a5",
+    "lua/ge/extensions/beamngEarth/issuefmt.lua": "0c48767549c50a5f8b4731c95bf61eb95643b9f2718a7ad1f8678872dc89b0ca",
+    "lua/ge/extensions/beamngEarth/lattice.lua": "4105784f62353ec0d28ae0bcc0876e0f22c3f9bb0ff58d0a734d2688869df897",
+    "lua/ge/extensions/beamngEarth/navgraph.lua": "b4c2c5c563cb8cb6b4795627e6aeab12b6fb2a08ecbb210c3293d7833efd5c4e",
+    "lua/ge/extensions/beamngEarth/net.lua": "23eb9f6ea74f5c863bff39e6776a2328cfd2b9f5bc165d805633a7e953b950c2",
+    "lua/ge/extensions/beamngEarth/parking.lua": "aa6e10436226f85767a99b0876656ccb91e07e139a025c9e4e2d306f9c8c81e0",
+    "lua/ge/extensions/beamngEarth/perfmon.lua": "f9c8d33c5410d98f453dea0b881088b7913f17b4c543873ba0f7f24a8ee930c5",
+    "lua/ge/extensions/beamngEarth/places.lua": "71b01f25a0d07b064ceed3fe42589798560a5b1f2d3de7738f62e2d77d78fb66",
+    "lua/ge/extensions/beamngEarth/postfx.lua": "3ece7d84a4d92274620b236e605be662c951dc64ed78a3650658a25a65f4ac87",
+    "lua/ge/extensions/beamngEarth/rebase.lua": "54d2d8eeb918d108565d4502fc066a9308a89ed7796755916b39356362ff9b4c",
+    "lua/ge/extensions/beamngEarth/report.lua": "4480cfa0a694cc006927d1fbc28e621917ca60e1aa829f00335c17488244855a",
+    "lua/ge/extensions/beamngEarth/roads.lua": "aae0ecae57004d17b9e92f5614af9e4938f8f1b8c42cf2c08f5ea57fbbe76b4a",
+    "lua/ge/extensions/beamngEarth/satmat.lua": "e52791033a55a510afbc6cc45478d2305a1933a1b246c7f4ded9dcfe6b8abc9e",
+    "lua/ge/extensions/beamngEarth/sea.lua": "05a98c71ddf334f84cf4d8865964bce704af503f5b3183b4c52e57029f174cf5",
+    "lua/ge/extensions/beamngEarth/seasonlook.lua": "9384bbe2730f2072c6e1e865637aa9e9dc71147d8564ef03e12bcd4603880676",
+    "lua/ge/extensions/beamngEarth/settings.lua": "8a81ae5ec2d41fa09d65b139ed1bf169efbad568762e0b8653fc3a3239891348",
+    "lua/ge/extensions/beamngEarth/sky.lua": "40b9c04418f6b0a90133ad9c13f053e3bf82064ad8ce5b211d9ed41d095d441b",
+    "lua/ge/extensions/beamngEarth/statusbar.lua": "e159eb81f0932263a42dac44afe700dc9b1722103b14e28e51daaea3b33b5b39",
+    "lua/ge/extensions/beamngEarth/stopwatch.lua": "07260f8229dc257124fd460ed840b9271e0740207ac96c7c8d7ee042d0e16623",
+    "lua/ge/extensions/beamngEarth/terrain.lua": "a7c52c2ee71a2ac6ee704f8b5155f284461bc8498a80c026c50d0931f2e74b53",
+    "lua/ge/extensions/beamngEarth/tileindex.lua": "1a939b123dd1ebed01db7fe1b2f1741144e65e014cb74a34ca3c55d6c83db87c",
+    "lua/ge/extensions/beamngEarth/trees.lua": "e850901caeab0320ff4ad42a0a9a67c5a011323231568bd0130823d789d88f91",
+    "lua/ge/extensions/beamngEarth/ui.lua": "2b1b53556e83b4d5ecefdbe5a9c4fb00e94e3a8e884b15df3c4d450e3dd35fdb",
+    "lua/ge/extensions/beamngEarth/weather.lua": "a9672cb8930fbb13ec38f2761e2b1bb5b85e0dcfc621934092f6905c0c9c0fc7",
+    "lua/ge/extensions/core/input/actions/beamngEarth.json": "b8831350d29c900ece81853b9c47446c7d42d1d3ee799dddc81ad0762503144c",
+    "scripts/beamng_earth/modScript.lua": "b5fc371c10ee0328dfbe78f39bbf9573d75bc8c7cc34ddddf6275c73b9cd4768",
+    "scripts/beamng_earth_sky/modScript.lua": "7fe87abd390fac983300712aa7c3ca50e9b7705fa190190cd694ca1334cfe3de",
+    "scripts/beamng_earth_weather/modScript.lua": "17db408790abab21f3af0ac70e17bbd7c01f050d3ef097c4832de3c66c280722",
+    "settings/inputmaps/keyboard_beamngEarth.json": "e5fddeff75924235310fe62e4215ac0b9a31d54553d773a43667c5591ceb0ac9",
+    "settings/ui_apps/originalLayouts/default/beamngEarth.uilayout.json": "8b7bfd6acc24e812e2d48fa38e40053b65cb86c2fe9fde1e57085fd59aec181f",
+    "ui/modules/apps/BeamNGEarthBanner/app.js": "e502f69bc3dc090d5e81cb4f43e13e12de218c6d4deb5f162c1cb5a737be35a6",
+    "ui/modules/apps/BeamNGEarthBanner/app.json": "6e7d4bf95f4aa84e679a5abf7c9ae633b1fa3f2fcf0c558a9bcab5a740cf5d03",
+    "ui/modules/apps/BeamNGEarthBanner/app.png": "d9d289f018e8dfb9612da7f65788dd412592138816588a4a50aa63d8216a6639",
+    "ui/modules/apps/BeamNGEarthCredits/app.js": "7777b46d9242149f326332652ade95c3586317f971c58265a0fa58b573e57b67",
+    "ui/modules/apps/BeamNGEarthCredits/app.json": "cacf710eecf6962a65b0a876a0894644408371f36406470c664ff7f28a9601d8",
+    "ui/modules/apps/BeamNGEarthCredits/app.png": "988fd13e79e1c53ee7d783aed416f29c025d0805c4209bbf12cd332ea9a526ab",
+    "ui/modules/apps/BeamNGEarthStatus/app.js": "c2a4fc89170255cbf029836370d5106c843fb762756dd7ae1f9ca54be4004fde",
+    "ui/modules/apps/BeamNGEarthStatus/app.json": "1a5ea7fa71767665d7a81e5dbc525ea48a8558983713dd2960446bbfc89d93c4",
+    "ui/modules/apps/BeamNGEarthStatus/app.png": "f18b0d2d5d6d5aa6c496540ff7d8abf1904fb69ff2aff14a80b0ffb11dc8eec8",
+    "ui/ui-vue/mods/beamngEarth/EarthMap.vue": "a5e5f37fae23675179b074d36afef3594e20b6e9f74fe3b59c77192a2b6a28d7",
+    "ui/ui-vue/mods/beamngEarth/EarthSettings.vue": "01154b0dd6b3f2ff3201eb40bab5ef262a8fabbe030be3ae306af0ba7d60d8d7",
+    "ui/ui-vue/mods/beamngEarth/EarthWelcome.vue": "78ba4879ef7c45912475a5e2a1ab55aa21fb0d75b6c7f8c3228effbfce0e05c0",
+    "ui/ui-vue/mods/beamngEarth/index.js": "e463d959ddbf5602047adc8be6866fa09adc888697156fbe54ef3712f198a078",
+    "ui/ui-vue/mods/beamngEarth/maplayers.js": "cdf28e45d070f7d487cc9e0e0aec989748d3af7c52186639dfa2c9f010858b82",
+    "ui/ui-vue/mods/beamngEarth/mapmath.js": "f19a4ced6e2b911204ebd720f781148682dd4c134ca2874d4dbcd020eaaf1bca"
+  },
+  "patches": [
+    {
+      "path": "patches/core.patch",
+      "sha256": "0aee53c50ee9f0fc0583b83a8e9cf99d666441dc66eaace93a15f452d71207b5"
+    },
+    {
+      "path": "patches/roads.patch",
+      "sha256": "2d9c6fcefeddcd7bb4e2f004403d8fdeddefd452d57a73f1a36b363e021aa7ec"
+    },
+    {
+      "path": "patches/farfield.patch",
+      "sha256": "3cc2c7abd2c1bbde4bd76281e2d005c012b1983297a15ea1f37d25b87cd68d41"
+    },
+    {
+      "path": "patches/sky.patch",
+      "sha256": "ceb9d1904b79ae193775ac84a29443d71e08972d4d3c851fe850fbbc797bd671"
+    },
+    {
+      "path": "patches/trees.patch",
+      "sha256": "fc800a613a297bb4aed67ea5611f495fe4ee3577739f417d0d38ca78d51f759c"
+    },
+    {
+      "path": "patches/lan-core.patch",
+      "sha256": "219cbdd04911f319c01c87dde285a0d76e67a956e2542e1a5fcd7aad38ca489d"
+    },
+    {
+      "path": "patches/lan-rebase.patch",
+      "sha256": "c40dbef7b6e674002b377b05b382a51ad9ce3d3ee050d2f2b0ca924717db385e"
+    },
+    {
+      "path": "patches/lan-net.patch",
+      "sha256": "a73a578a6a464f14ace2571d950b3a0df7878da0c290d45467ac9c58ec73ef6b"
+    },
+    {
+      "path": "patches/sea.patch",
+      "sha256": "46594b35d1b1e9131444a1f4371dd25d62a35b5b5187f56a7be59c29e42312f7"
+    },
+    {
+      "path": "patches/navgraph.patch",
+      "sha256": "42bd8b296712357f10f3c659807955cf86248c56e4bca91054d77724cd535c53"
+    },
+    {
+      "path": "patches/gps.patch",
+      "sha256": "8a14025136a053a21e6a03c601516ea56da108734dd676deb74055c0547e8101"
+    },
+    {
+      "path": "patches/audio-map.patch",
+      "sha256": "4da10d7c5603a32e9577b05bf17d235b3b9e202cd02a79771742d5df18dbceaf"
+    },
+    {
+      "path": "patches/audio-core.patch",
+      "sha256": "f28aadb55e83e26cee9ec952ffa205d642491e7c0b5f68bf682a805270432149"
+    }
+  ],
+  "additions": {
+    "lua/ge/extensions/beamngEarth/planetLaunch.lua": "addon/lua/ge/extensions/beamngEarth/planetLaunch.lua",
+    "lua/ge/extensions/beamngEarth/planetReadiness.lua": "addon/lua/ge/extensions/beamngEarth/planetReadiness.lua",
+    "lua/ge/extensions/beamngEarth/planetCoordinator.lua": "addon/lua/ge/extensions/beamngEarth/planetCoordinator.lua",
+    "lua/ge/extensions/beamngEarth/planetFrames.lua": "addon/lua/ge/extensions/beamngEarth/planetFrames.lua",
+    "lua/ge/extensions/beamngEarth/planetMultiplayer.lua": "addon/lua/ge/extensions/beamngEarth/planetMultiplayer.lua",
+    "lua/ge/extensions/beamngEarth/planetNetCodec.lua": "addon/lua/ge/extensions/beamngEarth/planetNetCodec.lua",
+    "lua/ge/extensions/beamngEarth/navigationAudio.lua": "addon/lua/ge/extensions/beamngEarth/navigationAudio.lua",
+    "lua/ge/extensions/beamngEarth/trafficBoundary.lua": "addon/lua/ge/extensions/beamngEarth/trafficBoundary.lua",
+    "lua/ge/extensions/beamngEarth/navigationPath.lua": "addon/lua/ge/extensions/beamngEarth/navigationPath.lua"
+  },
+  "compatibility": {
+    "gameVersion": "0.40 source API snapshot; observed PE 0.40.2.0.290224",
+    "historicalAuditLabel": "0.40.0.0.287428",
+    "observedPEVersion": "0.40.2.0.290224",
+    "gameFiles": {
+      "Bin64/BeamNG.drive.x64.exe": "8873b72c4716ea188309e0cc70ff611c15b89e49f6016443f5c424c233fff1cc",
+      "ui/ui-vue/src/modules/mainmenu/views/MainGridView.vue": "986208472a60e5dfa9812faeddb86fb75898a2e2b49cf9d294c32e92455446a9",
+      "ui/ui-vue/src/modules/mainmenu/views/MainMenu.vue": "97a1e76871ab5e7e889b314d9667dea0c244905794e20754a580454292bca1e8",
+      "ui/ui-vue/src/modules/mainmenu/routes.js": "bfa719e480005e91568f0f9ab3e7e1ecf5293e52f3fc16d6cc3a9f14297749be",
+      "ui/ui-vue/src/router/index.js": "c772ee6872dd7ad534cb1b59ebd4c962393bcdd3f293618462560a52840c1a1a",
+      "ui/ui-vue/src/services/popup.js": "4bc200bd9ef09e67cb38823b7ac9ab9f01e116801463d6b00ad9a0b88141e586",
+      "ui/ui-vue/src/common/modules/popup/views/Popup.vue": "eec4bd22d285d1b53d91f75c86a06f7691e067a301bc26d79e4768679c5cc0e4",
+      "ui/ui-vue/src/modules/vehicleselect/views/VehicleSelector.vue": "63d296b8fa70c3db1c7b937caab560cf1d97826e32200880949b4fd89f6a0981",
+      "lua/ge/extensions/freeroam/freeroam.lua": "a46edaa0f559dbcc58ac1c3cc8ab032273871a680ebf53b4902d22336fb42263",
+      "lua/ge/extensions/freeroam/freeroamConfigurator.lua": "8284592b01a402efdab0ef8fb1cf2d078af5403ff7c05759e0a6f483790977fb",
+      "lua/ge/extensions/ui/router/routeManager.lua": "f90b175ed609b2da7dfef37f7c9c2b1992b8c5d445650ddbda5597a8ac80dbef",
+      "lua/ge/extensions/ui/vehicleSelector/general.lua": "6f5ff9df5007af7e7e4dd4dd1a6a7ac0bc3e7101b0be0040f296f0d5294d0a14",
+      "lua/ge/extensions/core/input/actionFilter.lua": "eb9c3c1d04f1dc27af688a0cd8baaf225953a42362c70d1f69703a15a2461ba9",
+      "lua/ge/main.lua": "90cf78ecf322381af547abd8c101c92a7cf61a70083559f97bf4ea63024e4a95",
+      "lua/ge/extensions/core/gamestate.lua": "01be67ccb4f93b4511f5474fb4111200c05e753d8776095d4396c88ca6ee784a",
+      "lua/ge/extensions/freeroam/configuratorOptions/freeroamOptions.lua": "a02fbbd9a67bbb00a8c50eccae90f06835d3cc486439f5d8bd28f98bbd6c92eb",
+      "lua/common/extensions.lua": "e86a47eebe280ff0ab86a1f65935e010a0bd223aa5a12043fd53a04555d4b5a5",
+      "ui/ui-vue/src/modules/mainmenu/components/buttons/Huge2.vue": "4c2f92a0df7a9fa2acbb410db1dacde93b9d5f3616c0322c107f6368113a7789",
+      "lua/ge/extensions/gameplay/traffic/trafficUtils.lua": "d057078ba10677ae4f87ecab64165115b9d2a2d08379fd66c1750b1b6b9e51d8",
+      "lua/ge/extensions/core/groundMarkers.lua": "af6a06c7a8527ad943c4b627908d1bf54622b0b9d265db37ffa3e212f34256bd",
+      "lua/ge/extensions/core/groundMarkerArrows.lua": "dd81422de6974fea6684f9a78691f01df345c1e6fd1da075f8a906dccd40882f",
+      "lua/ge/extensions/gameplay/route/route.lua": "34bef0676a4931efbbfa74d1aab10ce52e00b84a765f0a0e78c894379f73e860"
+    }
+  },
+  "addonAssets": {
+    "addon/ui/ui-vue/mods/beamngPlanet/assets/credits.json": "b7c71ee8bcc7b5e365858c78aa23efafdd8aa1776fc287c0cb13ee84199ddac2",
+    "addon/ui/ui-vue/mods/beamngPlanet/assets/NOTICE.txt": "b0b2c2421303d00198f2193a89d6a50682b1da4b1e37097f7ad2d65748e53016",
+    "addon/ui/ui-vue/mods/beamngPlanet/assets/places.mjs": "1bdfdc8d8e6a20cdebd449c34d7159532fc85aafbc237f95531da9fb9c753cdc",
+    "addon/ui/ui-vue/mods/beamngPlanet/assets/planet-card.jpg": "adbdbbc70c864e2041fef3bc3e6784a989d4620b239469c3636b292f66e2445e",
+    "addon/ui/ui-vue/mods/beamngPlanet/assets/world-overview.svg": "ef38f742470d4a9c5840e0e54ee147e38daf60f8ed0105ecccd95d5a273f67bc"
+  }
+}

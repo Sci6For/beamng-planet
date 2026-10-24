@@ -1,0 +1,182 @@
+--- a/lua/ge/extensions/beamngEarth/roads.lua
++++ b/lua/ge/extensions/beamngEarth/roads.lua
+@@ -79,6 +79,8 @@
+ local far = {}              -- far buildings (server buildings.far_tile): key "a:tx_ty" -> { anchor, id, shape, pos, hidden }
+ local farQ = {}             -- keys of far tiles to make
+ local lastError = nil
++local launchErrors = {}
++local collisionSerial, updateSerial, rebuiltFrame = 0, 0, -1
+ local sinceChange = stopwatch.new()  -- ms since a tile arrived / went or a road was made / deleted
+ local sinceReload = stopwatch.new()
+ local collisionDirty = false
+@@ -147,7 +149,10 @@
+ local slotsGone = {}       -- { n, serial, session } to report
+ local function slotOf(path) return tonumber(type(path) == 'string' and path:match('/slot_(%d+)%.cdae$') or nil) end
+ 
+-function M.setSession(s) session = s end
++function M.setSession(s)
++  if session ~= s then launchErrors = {} end
++  session = s
++end
+ 
+ -- An object with a pooled shape was made / is deleted.
+ local function slotMade(id, path)
+@@ -356,8 +361,10 @@
+   local ok, data = pcall(jsonDecode, text or '')
+   if not ok or type(data) ~= 'table' or type(data.chunks) ~= 'table' then
+     lastError = 'unreadable road tile ' .. tostring(msg.path)
++    launchErrors[key] = lastError
+     return false
+   end
++  launchErrors[key] = nil
+   -- pooled shape files: the server's slot paths instead of the tile's own files
+   local slots = {}
+   for _, what in ipairs({ 'road', 'deck', 'walk', 'walkcol', 'bld', 'bld2', 'bld3', 'bld4', 'bldcol', 'wire', 'tunnel' }) do
+@@ -372,13 +379,13 @@
+     end
+   end
+   local road = type(data.road) == 'table' and data.road.shape and type(data.road.pos) == 'table' and data.road
+-  tiles[key] = { anchor = msg.anchorId, objs = {}, queued = road and 0 or #data.chunks,
+-    colliders = type(data.colliders) == 'table' and data.colliders or {}, slots = slots, at = now(), colWant = {} }
++  tiles[key] = { anchor = msg.anchorId, launchSession = session, objs = {}, queued = road and 0 or #data.chunks,
++    colliders = type(data.colliders) == 'table' and data.colliders or {}, slots = slots, at = now(), colWant = {}, launchChunks = road and 0 or #data.chunks, launchCompleted = 0, launchRoad = road and true or false }
+   sinceChange = stopwatch.new()
+   if road then                -- the tile's road mesh replaces its DecalRoads (server/roadmesh.py)
+-    walkQ[#walkQ + 1] = { key = key, walk = road, what = 'road' }
++    walkQ[#walkQ + 1] = { key = key, owner = tiles[key], walk = road, what = 'road' }
+   else
+-    for _, c in ipairs(data.chunks) do createQ[#createQ + 1] = { key = key, chunk = c } end
++    for _, c in ipairs(data.chunks) do createQ[#createQ + 1] = { key = key, owner = tiles[key], chunk = c } end
+   end
+   if type(data.props) == 'table' and type(data.props.items) == 'table' then   -- street lights, poles (trees.lua)
+     require('beamngEarth/trees').onRows(msg.anchorId, 'p' .. tostring(msg.key), data.props.items, data.props.groups)
+@@ -389,7 +396,7 @@
+     tiles[key].park = true
+   end
+   if type(data.wire) == 'table' and data.wire.shape and type(data.wire.pos) == 'table' then    -- pole wires
+-    walkQ[#walkQ + 1] = { key = key, walk = data.wire, what = 'wire' }
++    walkQ[#walkQ + 1] = { key = key, owner = tiles[key], walk = data.wire, what = 'wire' }
+   end
+   -- sidewalks, bridge decks, buildings (split in parts under the engine's 16-bit index limit), the buildings'
+   -- lean collision mesh: colliders only near the car (M.COLLIDE_M); with a bldcol the drawn buildings only render
+@@ -403,7 +410,7 @@
+   for _, what in ipairs({ 'walk', 'deck', 'bld', 'bld2', 'bld3', 'bld4', 'bldcol', 'walkcol', 'tunnel' }) do
+     local w = data[what]
+     if type(w) == 'table' and w.shape and type(w.pos) == 'table' then
+-      local q = { key = key, walk = w, what = what,
++      local q = { key = key, owner = tiles[key], walk = w, what = what,
+         renderOnly = (lean and what:sub(1, 3) == 'bld' and what ~= 'bldcol') or (leanWalk and what == 'walk') }
+       if not q.renderOnly then tiles[key].colWant[what] = true end
+       if q.renderOnly or M.collideNear(tiles[key]) then walkQ[#walkQ + 1] = q else parked[#parked + 1] = q end
+@@ -605,6 +612,7 @@
+ 
+ -- Once per frame (core onUpdate): deletions, then creations, within the governor's budget.
+ function M.update(gov, currentAnchor, player)
++  updateSerial = updateSerial + 1
+   if currentAnchor then switchAnchor(currentAnchor) end
+   releaseGhosts(player)
+   while #deleteQ > 0 and gov:try('roadDelete') do
+@@ -624,11 +632,13 @@
+   while #createQ > 0 and gov:try('roadChunk') do
+     local q = table.remove(createQ, 1)
+     local t = tiles[q.key]
+-    if t then
++    if t and t == q.owner then
+       local t0 = now()
+       loadMaterials()
+       local ok, id = pcall(createChunk, q.chunk)
+-      if ok then t.objs[#t.objs + 1] = id else lastError = tostring(id) end
++      if ok and id then
++        t.objs[#t.objs + 1] = id; t.launchCompleted = t.launchCompleted + 1
++      else lastError = tostring(id); launchErrors[q.key] = lastError end
+       t.queued = t.queued - 1
+       gov:charge('roadChunk', now() - t0)
+       sinceChange = stopwatch.new()
+@@ -639,6 +649,7 @@
+   while #walkQ > 0 and gov:try('roadWalk') do
+     local q = table.remove(walkQ, M.nextWalk(walkQ))
+     local t = tiles[q.key]
++    if t ~= q.owner then t = nil end -- replaced payload: old queued success cannot satisfy it
+     -- (only a colliding mesh waits: a render-only one (q.renderOnly: the drawn sidewalks and buildings beside their lean
+     -- collision meshes) cannot catch the car, and holding it hid a whole tile's sidewalks while the car stood in their
+     -- box: a roundabout's island band was never drawn, 2026-10-17 Harbor Point)
+@@ -652,6 +663,7 @@
+       local isRoad = q.what == 'road' or q.what == 'wire' or q.renderOnly   -- render-only meshes
+       -- the buildings' and sidewalks' lean meshes are a collision detail (server cdae collision_only): never drawn
+       local ok, id = pcall(createWalk, q.walk, (q.what == 'bldcol' or q.what == 'walkcol') and 'Collision Mesh' or not isRoad)
++      ok = ok and id ~= nil
+       if ok then slotMade(id, q.walk.shape) end
+       if ok then
+         if not isRoad then t.cq = t.cq or {}; t.cq[q.what] = q end
+@@ -659,7 +671,10 @@
+           t[q.what] = id; collisionDirty = true; newColliders[#newColliders + 1] = { id, q }
+           t.colAt = t.colAt or {}; t.colAt[q.what] = now()
+         end
+-      else lastError = tostring(id) end
++      else
++        lastError = tostring(id)
++        if q.what == 'road' or (not q.renderOnly and q.what ~= 'wire') then launchErrors[q.key] = lastError end
++      end
+       gov:charge('roadWalk', now() - t0)
+       sinceChange = stopwatch.new()
+     end
+@@ -676,6 +691,7 @@
+     noteNewColliders()
+     be:reloadCollision()
+     lastReloadAt = now()
++    collisionSerial, rebuiltFrame = collisionSerial + 1, updateSerial
+     collisionDirty, deletesDirty, sinceReload = false, false, stopwatch.new()
+     gov:charge('roadWalk', now() - t0)
+   end
+@@ -823,6 +839,34 @@
+   return true
+ end
+ 
++-- Fixed launch box only: at radius 128 this visits four cells, never the world queues.
++-- Empty payloads are valid; failed/dequeued work is retained as a failure.
++function M.launchReadiness(aid, box)
++  local out = {required=0,ready=0,errors={},collisionSerial=collisionSerial,
++    settled=swapQuiet == nil and updateSerial > rebuiltFrame}
++  if not M.enabled then out.errorCode='roadsDisabled' end
++  if not box then return out end
++  for gx=math.floor(box[1]/M.TILE_M),math.floor(box[3]/M.TILE_M) do
++    for gy=math.floor(box[2]/M.TILE_M),math.floor(box[4]/M.TILE_M) do
++      out.required=out.required+1
++      local key=tileKey(aid,gx..'_'..gy)
++      local t=tiles[key]
++      if launchErrors[key] then out.errors[#out.errors+1]={key=key,error=launchErrors[key]} end
++      local ready=M.enabled and aid ~= nil and aid == anchorId and t and not t.ghost
++        and session ~= nil and t.launchSession == session
++        and not launchErrors[key] and t.launchCompleted == t.launchChunks
++        and (not t.launchRoad or t.road) and out.settled
++      if ready then
++        for what in pairs(t.colWant or {}) do
++          if not t[what] or ((t.colAt and t.colAt[what]) or math.huge) >= lastReloadAt then ready=false end
++        end
++      end
++      if ready then out.ready=out.ready+1 end
++    end
++  end
++  return out
++end
++
+ -- Something else made colliding objects near the player (trees.lua's Forest items): rebuild collision at the
+ -- next throttled slot.
+ function M.requestCollision() collisionDirty = true end
+@@ -835,6 +879,7 @@
+   -- that rebuild already made them solid: one held now leaves the physics at the next one
+   local removed = noteNewColliders()
+   lastReloadAt = now()
++  collisionSerial, rebuiltFrame = collisionSerial + 1, updateSerial
+   collisionDirty, deletesDirty, sinceReload = removed > 0, false, stopwatch.new()
+ end
+ 
+@@ -869,6 +914,8 @@
+   objSlot, slotLive, slotDropped = {}, {}, {}
+   tiles, createQ, deleteQ, walkQ, anchorId, loadedMaterials = {}, {}, {}, {}, nil, false
+   far, farQ = {}, {}
++  launchErrors = {}
++  collisionSerial, updateSerial, rebuiltFrame = 0, 0, -1
+   collisionDirty, deletesDirty = false, false
+ end
+ 

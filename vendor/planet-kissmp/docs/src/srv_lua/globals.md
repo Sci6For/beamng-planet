@@ -1,0 +1,9 @@
+## Globals
+- SERVER_TICKRATE
+- SERVER_NAME
+- MAX_PLAYERS
+- MAX_VEHICLES_PER_CLIENT
+- MPSC_CHANNEL_SENDER
+- hooks
+- vehicles
+- connections

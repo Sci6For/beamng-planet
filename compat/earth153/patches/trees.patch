@@ -1,0 +1,34 @@
+--- a/lua/ge/extensions/beamngEarth/trees.lua
++++ b/lua/ge/extensions/beamngEarth/trees.lua
+@@ -19,7 +19,8 @@
+ M.GROUP_MAX_M = { shrub = 250, desert_shrub = 250, rock = 400, desert_rock = 400, door = 120, hydrant = 200, bin = 200, bench = 200, polelamp = 400,
+   stop = 300, giveway = 300, signal = 500, fence = 150, wallsign_logistics = 800, wallsign_rentabox = 800, wallsign_lemon = 800, wallsign_turboburger = 500,
+   speed30 = 300, speed40 = 300, speed50 = 300, speed60 = 300, speed70 = 300,
+-  speedk40 = 300, speedk60 = 300, speedk80 = 300, speedk100 = 300 }
++  speedk30 = 300, speedk40 = 300, speedk50 = 300, speedk60 = 300, speedk80 = 300, speedk90 = 300, speedk100 = 300,
++  busstop = 250, busshelter = 250 }
+ M.FOREST_NAME = 'bngEarthForest'      -- a prefix: small Forests from a pool ('bngEarthForest_<n>')
+ -- A small Forest per tile, from a pool (2026-10-15, 100 mph drives: one shared Forest with ~240k items made and ~220k
+ -- removed over a session made frames with any tree change cost ~100 ms in the engine's tick, and a fresh game ran the
+@@ -135,6 +136,13 @@
+   speed50 = { { UT .. 'ut_roadsigns/ut_50_speed_limit', 2.6 } }, speed60 = { { UT .. 'ut_roadsigns/ut_60_speed_limit', 2.6 } },
+   speed70 = { { UT .. 'ut_roadsigns/ut_70_speed_limit', 2.6 } },
+   -- ... and the round km/h signs (furniture.SIGN_KMH, outside the mph countries: Driver Training's)
++  -- Verified stock metric signs; the global Italy kit supplies 30/50/90 missing from Driver Training.
++  speedk30 = { { '/art/shapes/garage_and_dealership/Clutter/italy_traf_sign_speed_30', 3.495 } },
++  speedk50 = { { '/art/shapes/garage_and_dealership/Clutter/italy_traf_sign_speed_50', 3.495 } },
++  speedk90 = { { '/art/shapes/garage_and_dealership/Clutter/italy_traf_sign_speed_90', 3.495 } },
++  -- Generic stock appearance at real mapped boarding points; shelter only when explicitly mapped.
++  busstop = { { '/art/shapes/objects/s_sign_busstop', 3.946 } },
++  busshelter = { { '/art/shapes/objects/s_busstop_it', 3.115 } },
+   speedk40 = { { '/levels/driver_training/art/shapes/race/sign_speed40kph', 2.47 } },
+   speedk60 = { { '/levels/driver_training/art/shapes/race/sign_speed60kph', 2.47 } },
+   speedk80 = { { '/levels/driver_training/art/shapes/race/sign_speed80kph', 2.47 } },
+@@ -162,6 +170,7 @@
+   '/levels/automation_test_track/art/shapes/buildings',     -- the utility pole's wood_trim / painted metal
+   ECA .. 'signs_usa', '/art/shapes/objects', '/levels/east_coast_usa/art/shapes', WCA .. 'objects', ECA .. 'buildings',
+   UT .. 'ut_roadsigns', '/levels/driver_training/art/shapes/race',
++  '/art/shapes/garage_and_dealership/Clutter',
+ }
+ 
+ local stopwatch = require('beamngEarth/stopwatch')

@@ -1,0 +1,17 @@
+{
+  "formatVersion": 1,
+  "ipcVersion": 3,
+  "networkVersion": 1,
+  "worldFormatVersion": 1,
+  "alpn": "planet-lan/1",
+  "runtime": {
+    "bridgePath": "network/kissmp-bridge.exe",
+    "serverPath": "network/kissmp-server.exe",
+    "publicListing": false,
+    "upnp": false,
+    "allowRemoteScripts": false,
+    "allowModDownloads": false
+  },
+  "mutableData": "profile/settings/beamngEarthAutostart/lan",
+  "releaseAccepted": false
+}

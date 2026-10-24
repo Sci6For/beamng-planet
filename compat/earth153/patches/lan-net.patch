@@ -1,0 +1,11 @@
+--- a/lua/ge/extensions/beamngEarth/net.lua
++++ b/lua/ge/extensions/beamngEarth/net.lua
+@@ -158,4 +158,8 @@
+   timer = RECONNECT_S
+ end
+ 
++function M.planetUseProxy(enabled)
++  M.close()
++  M.HOST, M.PORT = '127.0.0.1', enabled and 47615 or 47613
++end
+ return M

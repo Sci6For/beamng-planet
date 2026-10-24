@@ -1,0 +1,47 @@
+--- a/lua/ge/extensions/beamngEarth/farfield.lua
++++ b/lua/ge/extensions/beamngEarth/farfield.lua
+@@ -1340,6 +1340,44 @@
+ -- anchor's tile, and whether that frame was an exact miss (mesh mode).
+ function M.exactState() return under.level, under.old, under.miss end
+ 
++-- Planet near ground only. Exact-grid lookups cannot be satisfied by a coarser
++-- horizon tile, an old session, hidden cover or a pending material fallback.
++function M.launchReadiness(sess, aid, box)
++  local out={required=0,ready=0,errors={}}
++  local n=lattice.L0*2^exactLevel
++  if not box or n~=n or n<=0 or n==math.huge then out.errorCode='unsupportedNearGrid'; return out end
++  local x0,x1=floor(box[1]/n),floor((box[3]-1e-6)/n)
++  local y0,y1=floor(box[2]/n),floor((box[4]-1e-6)/n)
++  out.required=(x1-x0+1)*(y1-y0+1)
++  -- The supported 64/128 m grids use 16/4 cells. Bound even malformed settings.
++  if out.required<=0 or out.required>256 then out.errorCode='unsupportedNearGrid'; return out end
++  if sess==nil or aid==nil or sess~=session or aid~=anchorId then return out end
++  for x=x0,x1 do
++    for y=y0,y1 do
++      local key=exactLevel..'_'..x..'_'..y
++      local inst=live[key]
++      local p=pending[key] or inst
++      if p and p.anchor==aid and p.session==sess and (p.failed or p.matFailed) then
++        out.errors[#out.errors+1]={key=key,error=p.failed and 'meshFailed' or 'materialFailed'}
++      end
++      local o=inst and getObj(inst)
++      local ready=inst and inst.anchor==aid and inst.session==sess and inst.level==exactLevel
++        and inst.loaded and inst.shown and not inst.queued and not inst.failed and not inst.matFailed
++        and not inst.doomed and not inst.hidden and o and o.hidden~=true
++        and inst.grp==nil and inst.coverAnim==nil and abs(inst.off)<=M.EXACT_OFF
++        and inst.x0<=x*n+1e-6 and inst.y0<=y*n+1e-6
++        and inst.x1>=(x+1)*n-1e-6 and inst.y1>=(y+1)*n-1e-6
++      if ready and inst.material then
++        local mat=inst.mat and scenetree.findObject(inst.mat)
++        ready=mat and mat.getField and type(inst.texture)=='string'
++          and FS:fileExists(inst.texture) and mat:getField('colorMap',0)==inst.texture
++      elseif ready then ready=scenetree.findObject(M.MATERIAL)~=nil end
++      if ready then out.ready=out.ready+1 end
++    end
++  end
++  return out
++end
++
+ -- The exact (physics lattice) level of a tile grid: the level whose tile is `cells` lattice squares
+ -- wide (32 cells: L-2 = 64 m; 64 cells: L-1 = 128 m).
+ function M.exactLevelFor(cells)

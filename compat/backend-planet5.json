@@ -1,0 +1,36 @@
+{
+  "backendVersion": "1.5.4-planet5",
+  "sha256": "aed681cb138ee466541bb95c52f972f3e672991e176c7449585c01bc5448d189",
+  "source": "vendor/earth154",
+  "buildRecord": "artifacts/backend-planet5-final/build.json",
+  "sourceHashesVerified": 69,
+  "nativeSha256": "421facf18007fec126766b9234ed48f79701210ee2bcdcb2dfd456b200ded2a3",
+  "clientBaseVersion": "1.5.3-beta",
+  "protocol": 4,
+  "contentFormat": 4,
+  "package": "artifacts/planet-regional-paths-final-20261021",
+  "packageManifestSha256": "148abbd8c0820de2db18118622a732838368de156739ecbb5ef60e983ca551af",
+  "installedOwnershipVerified": true,
+  "vegetationCacheVersion": 16,
+  "compiledProbe": "artifacts/road-probe/ridder-planet5-final",
+  "dataAndPerformanceEvidence": "artifacts/city-regional-probe",
+  "liveVisualAcceptance": false,
+  "supersededNeverInstalled": [
+    "artifacts/backend-planet5",
+    "artifacts/backend-planet5-reviewed",
+    "artifacts/planet-regional-paths-20261021"
+  ],
+  "limits": [
+    "Regional styles are procedural fallbacks; source data does not identify exact architectural series.",
+    "Unclassified buildings, including house 20, retain generic typology; mapped floors are preserved.",
+    "No new external models; existing game material palette reused.",
+    "Pedestrian stairs and elevated spans unsupported; existing terrain ground-model grid is 2 m.",
+    "Conservative path/car clipping can leave a short gap; no inferred ramps or pedestrian crossings.",
+    "Cache/flat-elevation timings are generator checks, not in-game FPS or visual acceptance.",
+    "Prior optional-data timeout limitation remains; railways, river upgrades and potholes are not part of this release."
+  ],
+  "backendTestsPassed": 188,
+  "backendSubtestsPassed": 8,
+  "packageInstallTestsPassed": 24,
+  "packageSubtestsPassed": 15
+}

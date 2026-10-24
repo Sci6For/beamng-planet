@@ -1,0 +1,16 @@
+{
+  "backendVersion": "1.5.4-beta",
+  "sha256": "7624d4352dfb89f2d2b25d72b90f9cebabb5d707f9c7bbbfbb8c8a16e4bcf105",
+  "release": "https://github.com/TecnaGamer/BeamNG.Earth/releases/tag/v1.5.4-beta",
+  "clientBaseVersion": "1.5.3-beta",
+  "clientSourceCommit": "011d6b54e42407b2f3a6deaddc47305cf2325a47",
+  "protocol": 4,
+  "contentFormat": 4,
+  "protocolModuleUnchanged": true,
+  "coldRoadSeconds": 72.4,
+  "warmRoadSeconds": 5.38,
+  "requiredRoadCells": 4,
+  "baseline153NoRoadsAfterSeconds": 150,
+  "liveAcceptance": "passed: Steam launch, 4/4 cells, stable0.75s, cover=false, visible vehicle and subsequent driving observed; map/labels confirmed in prior live run",
+  "notes": "Server update only. Planet client remains the pinned maintained fork. Both old and new protocol.py are byte-identical. Actual game acceptance required."
+}

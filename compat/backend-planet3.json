@@ -1,0 +1,27 @@
+{
+  "backendVersion": "1.5.4-planet3",
+  "sha256": "50717d2e8951559b46cc29371ecaadfbee9d6aad88d47268ac43dc0e99820215",
+  "upstreamVersion": "1.5.4-beta",
+  "source": "vendor/earth154",
+  "buildRecord": "artifacts/backend-planet3/build.json",
+  "clientBaseVersion": "1.5.3-beta",
+  "protocol": 4,
+  "contentFormat": 4,
+  "targetedTestsPassed": 111,
+  "packageInstallTestsPassed": 24,
+  "compiledProbe": "artifacts/road-probe/ridder-planet3",
+  "packageManifestSha256": "46b95dcbdc1114ee46111ea226f63bced8a60215153a83ee7b5543ec22c7f581",
+  "installedOwnershipVerified": true,
+  "liveVisualAcceptance": false,
+  "changes": [
+    "Disable legacy STOP/yield/mph and old metric models in active placement; retain new metric and mapped stops.",
+    "Apply mapped grass in blockworker as well as server terrain path.",
+    "Class 40 cropland uses bounded stock GRASS as vegetation proxy. Generic farmland polygons are not forced green.",
+    "Prefetch optional land_use/infrastructure/land near player after roads+landcover; ready includes land with existing shared deadline."
+  ],
+  "limits": [
+    "Grass is a crop vegetation proxy, not exact crop or seasonal appearance.",
+    "Late optional data after ready timeout does not rebuild an already active cached block.",
+    "No live in-game visual or FPS measurement this turn."
+  ]
+}

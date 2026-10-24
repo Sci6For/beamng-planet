@@ -1,0 +1,132 @@
+--- a/lua/ge/extensions/beamngEarth/sea.lua
++++ b/lua/ge/extensions/beamngEarth/sea.lua
+@@ -153,15 +153,50 @@
+ end
+ 
+ -- The tile of the server's set the point is in (the nearest centre if on an edge), or nil.
++local function inside(t, p)
++  local dx, dy = p.x - t.x, p.y - t.y
++  local ux, uy = t.ux or 1, t.uy or 0
++  return math.abs(dx * ux + dy * uy) <= t.width / 2 and
++         math.abs(-dx * uy + dy * ux) <= t.height / 2
++end
++
+ local function tileAt(p)
+   local best, bd
+   for _, t in pairs(want and want.tiles or {}) do
+-    if math.abs(p.x - t.x) <= t.size / 2 and math.abs(p.y - t.y) <= t.size / 2 then
++    if inside(t, p) then
+       local d = (p.x - t.x) ^ 2 + (p.y - t.y) ^ 2
+       if not bd or d < bd then best, bd = t, d end
+     end
+   end
+   return best
++end
++
++local function atan2(y, x)
++  if x > 0 then return math.atan(y / x) end
++  if x < 0 then return math.atan(y / x) + (y >= 0 and math.pi or -math.pi) end
++  return y >= 0 and math.pi / 2 or -math.pi / 2
++end
++
++local function setTileRotation(o, t)
++  -- The old square has no yaw. A shoreline rectangle also keeps its in-plane axes after a rebase.
++  local n = math.sqrt(t.nx * t.nx + t.ny * t.ny)
++  local yaw = atan2(t.uy or 0, t.ux or 1)
++  if n <= 1e-9 and math.abs(yaw) <= 1e-9 then
++    o:setField('rotation', 0, '0 0 1 0')
++    return
++  end
++  local halfTilt = math.asin(math.min(n, 1)) / 2
++  local sx, sy = 0, 0
++  if n > 1e-9 then sx, sy = -t.ny / n * math.sin(halfTilt), t.nx / n * math.sin(halfTilt) end
++  local tw, zs, zc = math.cos(halfTilt), math.sin(yaw / 2), math.cos(yaw / 2)
++  local qx, qy, qz, qw = sx * zc + sy * zs, sy * zc - sx * zs, tw * zs, tw * zc
++  local qn = math.sqrt(qx * qx + qy * qy + qz * qz)
++  if qn > 1e-9 then
++    o:setField('rotation', 0, string.format('%.9f %.9f %.9f %.6f', qx / qn, qy / qn, qz / qn,
++                                           math.deg(2 * atan2(qn, qw))))
++  else
++    o:setField('rotation', 0, '0 0 1 0')
++  end
+ end
+ 
+ -- gridSize, set first: the engine logs a warning when gridSize exceeds the scale, checked against the scale the block
+@@ -189,7 +224,7 @@
+ 
+ local function create(key, t)
+   local o = createObject('WaterBlock')
+-  setGridSize(o, t.size)
++  setGridSize(o, math.min(t.width, t.height))
+   for _, f in ipairs(FIELDS) do o:setField(f[1], f[2], f[3]) end
+   if key:sub(1, 1) == 'L' then
+     for _, f in ipairs(INLAND) do o:setField(f[1], f[2], f[3]) end
+@@ -197,16 +232,14 @@
+   for _, x in ipairs(TEXTURES) do o:setField(x[1], 0, exists(x[2]) and x[2] or x[3]) end
+   o:setField('cubemap', 0, 'BNG_Sky_01_cubemap')
+   -- the local vertical: a tilt of |n| radians about (-ny, nx, 0)
+-  local n = math.sqrt(t.nx * t.nx + t.ny * t.ny)
+-  if n > 1e-9 then
+-    o:setField('rotation', 0, string.format('%.9f %.9f 0 %.6f', -t.ny / n, t.nx / n, math.deg(math.asin(math.min(n, 1)))))
+-  end
++  setTileRotation(o, t)
+   o:setPosition(vec3(t.x, t.y, t.z))
+   -- a little larger than its square: tilted neighbours meet without a hairline gap (2026-10-13)
+-  o:setScale(vec3(t.size + M.TILE_OVERLAP_M, t.size + M.TILE_OVERLAP_M, M.DEPTH_M))
++  local overlap = math.min(M.TILE_OVERLAP_M, math.min(t.width, t.height) / 16)
++  o:setScale(vec3(t.width + overlap, t.height + overlap, M.DEPTH_M))
+   -- after the scale: the engine warns ("gridSize cannot be > scale", meaning this one) when it exceeds the scale, 100 m
+   -- before setScale (an 8 km tile's 128 m, 2026-10-17)
+-  o:setField('gridElementSize', 0, tostring(math.max(4, t.size / 64)))
++  o:setField('gridElementSize', 0, tostring(math.min(math.max(4, t.size / 64), math.min(t.width, t.height) / 2)))
+   o.canSave = false
+   o:registerObject(M.PREFIX .. key)
+   if scenetree.MissionGroup then scenetree.MissionGroup:addObject(o) end
+@@ -214,17 +247,15 @@
+   M.created = M.created + 1
+ end
+ 
+-local function inside(t, p)
+-  return math.abs(p.x - t.x) <= t.size / 2 and math.abs(p.y - t.y) <= t.size / 2
+-end
+-
+ -- A 'sea' message: { anchorId, tiles = { {key, x, y, z, size, nx, ny}, ... } }.
+ function M.onMessage(msg)
+   local tiles = {}
+   for _, r in ipairs(type(msg.tiles) == 'table' and msg.tiles or {}) do
+     if type(r) == 'table' and #r >= 7 then
+-      tiles[tostring(r[1])] = { x = tonumber(r[2]), y = tonumber(r[3]), z = tonumber(r[4]), size = tonumber(r[5]),
+-        nx = tonumber(r[6]), ny = tonumber(r[7]) }
++      local size = tonumber(r[5])
++      tiles[tostring(r[1])] = { x = tonumber(r[2]), y = tonumber(r[3]), z = tonumber(r[4]), size = size,
++        nx = tonumber(r[6]), ny = tonumber(r[7]), width = tonumber(r[8]) or size,
++        height = tonumber(r[9]) or size, ux = 1, uy = 0 }
+     end
+   end
+   local rivers = {}
+@@ -314,8 +345,13 @@
+     return x - ox, y - oy
+   end
+   local function mapTile(t)
++    local ux, uy = t.ux or 1, t.uy or 0
++    local bx, by = xf:apply(t.x + ux, t.y + uy, t.z)
+     t.x, t.y, t.z = xf:apply(t.x, t.y, t.z)
+     t.nx, t.ny = turn(t.nx or 0, t.ny or 0)
++    local dx, dy = bx - t.x, by - t.y
++    local d = math.sqrt(dx * dx + dy * dy)
++    if d > 1e-9 then t.ux, t.uy = dx / d, dy / d end
+   end
+   if want and want.anchorId == madeAnchor then
+     for _, t in pairs(want.tiles) do mapTile(t) end
+@@ -329,10 +365,7 @@
+     local o = scenetree.findObjectById(m.id)
+     if o then
+       local t = m.t
+-      local n = math.sqrt(t.nx * t.nx + t.ny * t.ny)
+-      if n > 1e-9 then
+-        o:setField('rotation', 0, string.format('%.9f %.9f 0 %.6f', -t.ny / n, t.nx / n, math.deg(math.asin(math.min(n, 1)))))
+-      end
++      setTileRotation(o, t)
+       o:setPosition(vec3(t.x, t.y, t.z))
+     end
+   end

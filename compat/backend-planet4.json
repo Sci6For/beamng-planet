@@ -1,0 +1,34 @@
+{
+  "backendVersion": "1.5.4-planet4",
+  "sha256": "74904aacf1508fefbac3d6ee71b0696ca34f48048764637cb31aa3fd40c00c0e",
+  "source": "vendor/earth154",
+  "buildRecord": "artifacts/backend-planet4/build.json",
+  "clientBaseVersion": "1.5.3-beta",
+  "protocol": 4,
+  "contentFormat": 4,
+  "backendTestsPassed": 132,
+  "uiTestsPassed": 39,
+  "packageInstallTestsPassed": 24,
+  "compiledProbe": "artifacts/road-probe/ridder-planet4",
+  "browserProbe": "artifacts/map-performance/browser-check.json",
+  "packageManifestSha256": "f3e7a6512412da20c8630a2769f761b31a66af528bb31fb8b4c3c5d068d3eea9",
+  "installedOwnershipVerified": true,
+  "vegetationCacheVersion": 15,
+  "liveVisualAcceptance": false,
+  "limits": [
+    "Map gestures tested in actual Vue in headless Edge with tile fixtures; embedded BeamNG CEF/FPS not measured.",
+    "Sidewalk regressions synthetic; cannot certify every mapped junction.",
+    "Mapped farmland required for grass-island rock exclusion; natural grassland rocks retained.",
+    "Bench/bin filter existing sidewalk candidates in mapped parks/gardens, not a new park path network.",
+    "Late optional data after timeout does not refresh active cached blocks."
+  ],
+  "futureAssessment": {
+    "bridges": "Existing structural deck/pier/arch/truss system; improve specific faulty examples.",
+    "railway": "Source lines present; no physical track renderer yet.",
+    "rivers": "Existing River nodes and bed carving; improve banks, width, levels.",
+    "pedestrian": "Squares partially supported, path/footway classes skipped.",
+    "regionalBuildings": "Current Ridder fallback cool climate; add region-specific building archetypes.",
+    "potholes": "Procedural visual/collision wear feasible; precise real locations not supplied by current data.",
+    "buildingColours": "Explicit source facade/roof colours already used; overhead roof imagery does not establish facade colour."
+  }
+}

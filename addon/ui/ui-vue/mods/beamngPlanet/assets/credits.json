@@ -1,0 +1,11 @@
+{
+  "planet-card.jpg": {
+    "kind": "photograph",
+    "title": "The Blue Marble",
+    "source": "https://science.nasa.gov/resource/the-blue-marble/",
+    "credit": "NASA Johnson Space Center, Apollo 17, AS17-148-22727",
+    "sha256": "adbdbbc70c864e2041fef3bc3e6784a989d4620b239469c3636b292f66e2445e",
+    "reuse": "NASA imagery; NASA media usage guidelines",
+    "terms": "https://www.nasa.gov/nasa-brand-center/images-and-media/"
+  }
+}
